@@ -1,14 +1,30 @@
-# Dùng image Java chính thức
-FROM openjdk:17-jdk-slim
-
-# Chỉ định thư mục làm việc
+# ============================
+# 🚀 Build Stage
+# ============================
+FROM maven:3.9.8-eclipse-temurin-17 AS build
 WORKDIR /app
 
-# Copy toàn bộ project vào container
-COPY . .
+# Copy file cấu hình Maven và source code
+COPY pom.xml .
+COPY src ./src
 
-# Build project bằng Maven Wrapper
-RUN ./mvnw clean package -DskipTests
+# Build ứng dụng, bỏ qua test
+RUN mvn clean package -DskipTests
 
-# Chạy file JAR sau khi build
-CMD ["java", "-jar", "target/*.jar"]
+# ============================
+# 🏃 Run Stage
+# ============================
+FROM eclipse-temurin:17-jdk-alpine
+WORKDIR /app
+
+# Copy file JAR từ stage build sang stage run
+COPY --from=build /app/target/*.jar app.jar
+
+# Thiết lập biến môi trường cho MongoDB (Render sẽ tự thay giá trị)
+ENV SPRING_DATA_MONGODB_URI=${SPRING_DATA_MONGODB_URI}
+ENV SERVER_PORT=8080
+
+EXPOSE 8080
+
+# Chạy ứng dụng
+ENTRYPOINT ["java","-jar","app.jar"]
