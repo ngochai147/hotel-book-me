@@ -1,7 +1,8 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { ArrowLeft, Calendar, MapPin, Search as SearchIcon, SlidersHorizontal, Star, Users } from 'lucide-react-native';
 import { useState } from 'react';
-import { useRouter } from 'expo-router';
-import { ArrowLeft, Search as SearchIcon, MapPin, Star } from 'lucide-react-native';
+import { Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import FilterModal from '../components/FilterModal';
 
 const searchHistory = [
   { id: 1, text: 'Hotel Bali', tag: true },
@@ -52,7 +53,22 @@ const recentlyViewed = [
 
 export default function SearchScreen() {
   const router = useRouter();
-  const [searchQuery, setSearchQuery] = useState('');
+  const params = useLocalSearchParams();
+  const [searchQuery, setSearchQuery] = useState(params.location as string || '');
+  const [showFilterModal, setShowFilterModal] = useState(false);
+
+  const bookingInfo = {
+    location: params.location as string,
+    checkIn: params.checkIn as string,
+    checkOut: params.checkOut as string,
+    rooms: params.rooms as string,
+    adults: params.adults as string,
+    children: params.children as string,
+  };
+
+  const handleFilterApply = (filters: any) => {
+    console.log('Applied filters:', filters);
+  };
 
   return (
     <View style={styles.container}>
@@ -68,10 +84,43 @@ export default function SearchScreen() {
             value={searchQuery}
             onChangeText={setSearchQuery}
             placeholderTextColor="#999"
-            autoFocus
           />
         </View>
+        <TouchableOpacity 
+          onPress={() => setShowFilterModal(true)} 
+          style={styles.filterButton}
+        >
+          <SlidersHorizontal size={20} color="#17A2B8" />
+        </TouchableOpacity>
       </View>
+
+      {/* Booking Info Bar */}
+      {bookingInfo.location && (
+        <View style={styles.bookingInfoBar}>
+          <View style={styles.bookingInfoItem}>
+            <MapPin size={14} color="#17A2B8" />
+            <Text style={styles.bookingInfoText} numberOfLines={1}>
+              {bookingInfo.location}
+            </Text>
+          </View>
+          <View style={styles.bookingInfoDivider} />
+          <View style={styles.bookingInfoItem}>
+            <Calendar size={14} color="#17A2B8" />
+            <Text style={styles.bookingInfoText} numberOfLines={1}>
+              {bookingInfo.checkIn && bookingInfo.checkOut 
+                ? `${bookingInfo.checkIn.split('/')[0]}/${bookingInfo.checkIn.split('/')[1]} - ${bookingInfo.checkOut.split('/')[0]}/${bookingInfo.checkOut.split('/')[1]}`
+                : 'Select dates'}
+            </Text>
+          </View>
+          <View style={styles.bookingInfoDivider} />
+          <View style={styles.bookingInfoItem}>
+            <Users size={14} color="#17A2B8" />
+            <Text style={styles.bookingInfoText}>
+              {bookingInfo.rooms}R • {(Number(bookingInfo.adults || 0) + Number(bookingInfo.children || 0))}G
+            </Text>
+          </View>
+        </View>
+      )}
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
@@ -166,6 +215,12 @@ export default function SearchScreen() {
           ))}
         </View>
       </ScrollView>
+
+      <FilterModal
+        visible={showFilterModal}
+        onClose={() => setShowFilterModal(false)}
+        onApply={handleFilterApply}
+      />
     </View>
   );
 }
@@ -203,6 +258,41 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     fontSize: 14,
     color: '#1a1a1a',
+  },
+  filterButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#E3F7FA',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bookingInfoBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  bookingInfoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+  },
+  bookingInfoText: {
+    fontSize: 11,
+    color: '#1a1a1a',
+    fontWeight: '500',
+    flex: 1,
+  },
+  bookingInfoDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: '#E5E7EB',
+    marginHorizontal: 8,
   },
   content: {
     flex: 1,

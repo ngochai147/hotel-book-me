@@ -1,7 +1,7 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from "react-native"
+import { useLocalSearchParams, useRouter } from "expo-router"
+import { ChevronLeft, Heart, MapPin, Share2, Star } from "lucide-react-native"
 import { useState } from "react"
-import { useRouter, useLocalSearchParams } from "expo-router"
-import { MapPin, Star, ChevronLeft, Share2, Heart } from "lucide-react-native"
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 
 type Hotel = {
   name: string
@@ -248,11 +248,25 @@ export default function HotelDetailScreen() {
     </View>
   )
 
+  const galleryImages = [
+    hotel.image,
+    hotel.roomTypes[0]?.image || hotel.image,
+    hotel.roomTypes[1]?.image || hotel.image,
+    hotel.image,
+  ];
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-      {/* Header Image */}
+      {/* Header Image Gallery */}
       <View style={styles.imageContainer}>
-        <Image source={{ uri: hotel.image }} style={styles.headerImage} />
+        <View style={styles.mainImageWrapper}>
+          <Image source={{ uri: hotel.image }} style={styles.headerImage} />
+        </View>
+        <View style={styles.thumbnailRow}>
+          {galleryImages.slice(1, 4).map((img, index) => (
+            <Image key={index} source={{ uri: img }} style={styles.thumbnailImage} />
+          ))}
+        </View>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <ChevronLeft size={24} color="white" />
         </TouchableOpacity>
@@ -266,18 +280,17 @@ export default function HotelDetailScreen() {
 
       {/* Hotel Info */}
       <View style={styles.hotelInfoSection}>
-        <Text style={styles.hotelName}>{hotel.name}</Text>
-        <View style={styles.locationRow}>
-          <MapPin size={14} color="#666" />
-          <Text style={styles.locationText}>{hotel.location}</Text>
-        </View>
-
-        {/* Rating and Reviews */}
-        <View style={styles.ratingSection}>
-          <View style={styles.ratingBox}>
-            <Star size={20} color="#FFA500" fill="#FFA500" />
-            <Text style={styles.ratingNumber}>{hotel.rating}</Text>
-            <Text style={styles.reviewCount}>{hotel.reviews} reviews</Text>
+        <View style={styles.hotelTitleRow}>
+          <View style={styles.hotelTitleLeft}>
+            <Text style={styles.hotelName}>{hotel.name}</Text>
+            <View style={styles.locationRow}>
+              <MapPin size={12} color="#666" />
+              <Text style={styles.locationText}>{hotel.location}</Text>
+            </View>
+          </View>
+          <View style={styles.ratingBadge}>
+            <Star size={16} color="#FFA500" fill="#FFA500" />
+            <Text style={styles.ratingBadgeText}>{hotel.rating}</Text>
           </View>
         </View>
 
@@ -366,7 +379,7 @@ export default function HotelDetailScreen() {
       <TouchableOpacity
         onPress={() => {
           if (id) {
-            router.push({ pathname: "/booking/id", params: { id: String(id) } })
+            router.push({ pathname: "/booking/[id]/step1-dates", params: { id: String(id) } })
           }
         }}
         style={styles.bookButton}
@@ -388,11 +401,27 @@ const styles = StyleSheet.create({
   imageContainer: {
     position: "relative",
     width: "100%",
-    height: 300,
+    backgroundColor: '#000',
+    paddingBottom: 8,
+  },
+  mainImageWrapper: {
+    width: '100%',
+    height: 220,
   },
   headerImage: {
     width: "100%",
     height: "100%",
+  },
+  thumbnailRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 8,
+    gap: 8,
+    marginTop: 8,
+  },
+  thumbnailImage: {
+    flex: 1,
+    height: 80,
+    borderRadius: 8,
   },
   backButton: {
     position: "absolute",
@@ -434,39 +463,45 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#E5E7EB",
   },
+  hotelTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  hotelTitleLeft: {
+    flex: 1,
+    marginRight: 12,
+  },
   hotelName: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "bold",
     color: "#1a1a1a",
-    marginBottom: 8,
+    marginBottom: 6,
   },
   locationRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
-    gap: 6,
+    gap: 4,
   },
   locationText: {
-    fontSize: 12,
+    fontSize: 11,
     color: "#666",
     flex: 1,
   },
-  ratingSection: {
-    marginBottom: 16,
+  ratingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF8E1',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 4,
   },
-  ratingBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  ratingNumber: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#1a1a1a",
-  },
-  reviewCount: {
-    fontSize: 12,
-    color: "#666",
+  ratingBadgeText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1a1a1a',
   },
   facilitiesSection: {
     marginBottom: 16,
@@ -715,6 +750,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 12,
+  },
+  reviewCount: {
+    fontSize: 12,
+    color: "#666",
   },
   reviewItem: {
     flexDirection: "row",

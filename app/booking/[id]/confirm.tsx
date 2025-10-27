@@ -1,24 +1,28 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ChevronLeft, Calendar, Users, MapPin, Check } from 'lucide-react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Calendar, Check, ChevronLeft, CreditCard, MapPin, Users } from 'lucide-react-native';
 import { useState } from 'react';
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function ConfirmBookingScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams();
+  const { id, checkIn, checkOut, rooms, adults, children, name, email, phone, payment } = useLocalSearchParams();
   const [isConfirmed, setIsConfirmed] = useState(false);
 
   const bookingDetails = {
-    hotel: 'The Gramary by Young Villas',
-    location: 'Bali, Indonesia',
+    hotel: 'Grand Mecure Bali',
+    location: 'Seminyak, Bali',
     image: 'https://images.pexels.com/photos/164595/pexels-photo-164595.jpeg?auto=compress&cs=tinysrgb&w=400',
-    checkIn: 'September 15, 2024',
-    checkOut: 'September 20, 2024',
-    guests: '2 Adults, 1 Child',
+    checkIn: checkIn || '15 Sep 2024',
+    checkOut: checkOut || '18 Sep 2024',
+    guests: `${adults || 2} Adults${Number(children) > 0 ? `, ${children} Child${Number(children) > 1 ? 'ren' : ''}` : ''}`,
+    rooms: rooms || '1',
     nights: 5,
     pricePerNight: 280,
     serviceFee: 25,
     cleaningFee: 40,
+    name: name || '',
+    email: email || '',
+    phone: phone || '',
   };
 
   const total = (bookingDetails.pricePerNight * bookingDetails.nights) + bookingDetails.serviceFee + bookingDetails.cleaningFee;
@@ -52,7 +56,7 @@ export default function ConfirmBookingScreen() {
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <ChevronLeft size={24} color="#1a1a1a" />
         </TouchableOpacity>
-        <Text style={styles.title}>Confirm Booking</Text>
+        <Text style={styles.title}>Booking and Payment</Text>
       </View>
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
@@ -64,77 +68,97 @@ export default function ConfirmBookingScreen() {
               <MapPin size={14} color="#666" />
               <Text style={styles.location}>{bookingDetails.location}</Text>
             </View>
+            <View style={styles.ratingRow}>
+              <Text style={styles.rating}>⭐ 4.8</Text>
+            </View>
           </View>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Booking Details</Text>
+          <Text style={styles.sectionTitle}>Check-in</Text>
+          <View style={styles.detailCard}>
+            <Calendar size={20} color="#17A2B8" />
+            <Text style={styles.detailValue}>{bookingDetails.checkIn}</Text>
+          </View>
+        </View>
 
-          <View style={styles.detailItem}>
-            <View style={styles.detailIcon}>
-              <Calendar size={20} color="#17A2B8" />
-            </View>
-            <View style={styles.detailInfo}>
-              <Text style={styles.detailLabel}>Check-in</Text>
-              <Text style={styles.detailValue}>{bookingDetails.checkIn}</Text>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Check-out</Text>
+          <View style={styles.detailCard}>
+            <Calendar size={20} color="#17A2B8" />
+            <Text style={styles.detailValue}>{bookingDetails.checkOut}</Text>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Rooms and Guests</Text>
+          <View style={styles.detailCard}>
+            <Users size={20} color="#17A2B8" />
+            <Text style={styles.detailValue}>{bookingDetails.rooms} Room{Number(bookingDetails.rooms) > 1 ? 's' : ''} | {bookingDetails.guests}</Text>
+          </View>
+        </View>
+
+        {bookingDetails.name && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Guest Information</Text>
+            <View style={styles.infoCard}>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Name</Text>
+                <Text style={styles.infoValue}>{bookingDetails.name}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Email</Text>
+                <Text style={styles.infoValue}>{bookingDetails.email}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Phone</Text>
+                <Text style={styles.infoValue}>{bookingDetails.phone}</Text>
+              </View>
             </View>
           </View>
+        )}
 
-          <View style={styles.detailItem}>
-            <View style={styles.detailIcon}>
-              <Calendar size={20} color="#17A2B8" />
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Payment Method</Text>
+          <View style={styles.paymentCard}>
+            <View style={styles.paymentIcon}>
+              <CreditCard size={20} color="#17A2B8" />
             </View>
-            <View style={styles.detailInfo}>
-              <Text style={styles.detailLabel}>Check-out</Text>
-              <Text style={styles.detailValue}>{bookingDetails.checkOut}</Text>
-            </View>
-          </View>
-
-          <View style={styles.detailItem}>
-            <View style={styles.detailIcon}>
-              <Users size={20} color="#17A2B8" />
-            </View>
-            <View style={styles.detailInfo}>
-              <Text style={styles.detailLabel}>Guests</Text>
-              <Text style={styles.detailValue}>{bookingDetails.guests}</Text>
-            </View>
+            <Text style={styles.paymentText}>Credit Card</Text>
           </View>
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Price Details</Text>
+          <View style={styles.priceCard}>
+            <View style={styles.priceRow}>
+              <Text style={styles.priceLabel}>${bookingDetails.pricePerNight} x {bookingDetails.nights} nights</Text>
+              <Text style={styles.priceValue}>${bookingDetails.pricePerNight * bookingDetails.nights}</Text>
+            </View>
 
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>${bookingDetails.pricePerNight} x {bookingDetails.nights} nights</Text>
-            <Text style={styles.priceValue}>${bookingDetails.pricePerNight * bookingDetails.nights}</Text>
-          </View>
+            <View style={styles.priceRow}>
+              <Text style={styles.priceLabel}>Service fee</Text>
+              <Text style={styles.priceValue}>${bookingDetails.serviceFee}</Text>
+            </View>
 
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>Service fee</Text>
-            <Text style={styles.priceValue}>${bookingDetails.serviceFee}</Text>
-          </View>
+            <View style={styles.priceRow}>
+              <Text style={styles.priceLabel}>Cleaning fee</Text>
+              <Text style={styles.priceValue}>${bookingDetails.cleaningFee}</Text>
+            </View>
 
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>Cleaning fee</Text>
-            <Text style={styles.priceValue}>${bookingDetails.cleaningFee}</Text>
-          </View>
+            <View style={styles.divider} />
 
-          <View style={styles.divider} />
-
-          <View style={styles.priceRow}>
-            <Text style={styles.totalLabel}>Total</Text>
-            <Text style={styles.totalValue}>${total}</Text>
+            <View style={styles.priceRow}>
+              <Text style={styles.totalLabel}>Total</Text>
+              <Text style={styles.totalValue}>${total}</Text>
+            </View>
           </View>
         </View>
       </ScrollView>
 
       <View style={styles.footer}>
-        <View style={styles.totalSection}>
-          <Text style={styles.footerLabel}>Total</Text>
-          <Text style={styles.footerTotal}>${total}</Text>
-        </View>
         <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm}>
-          <Text style={styles.confirmButtonText}>Confirm & Pay</Text>
+          <Text style={styles.confirmButtonText}>Done and Continue</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -204,6 +228,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
   },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  rating: {
+    fontSize: 12,
+    color: '#666',
+  },
   section: {
     marginBottom: 24,
   },
@@ -212,6 +245,60 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#1a1a1a',
     marginBottom: 16,
+  },
+  detailCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8f8f8',
+    borderRadius: 12,
+    padding: 16,
+    gap: 12,
+  },
+  infoCard: {
+    backgroundColor: '#f8f8f8',
+    borderRadius: 12,
+    padding: 16,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  infoLabel: {
+    fontSize: 14,
+    color: '#666',
+  },
+  infoValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1a1a1a',
+  },
+  paymentCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8f8f8',
+    borderRadius: 12,
+    padding: 16,
+    gap: 12,
+  },
+  paymentIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#E3F7FA',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  paymentText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1a1a1a',
+  },
+  priceCard: {
+    backgroundColor: '#f8f8f8',
+    borderRadius: 12,
+    padding: 16,
   },
   detailItem: {
     flexDirection: 'row',
@@ -281,21 +368,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderTopWidth: 1,
     borderTopColor: '#f0f0f0',
-  },
-  totalSection: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  footerLabel: {
-    fontSize: 14,
-    color: '#666',
-  },
-  footerTotal: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#17A2B8',
   },
   confirmButton: {
     height: 56,

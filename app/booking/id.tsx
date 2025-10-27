@@ -1,8 +1,8 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Platform } from 'react-native';
-import { useState } from 'react';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ChevronLeft, Calendar, Users, Minus, Plus } from 'lucide-react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Calendar, ChevronLeft, Minus, Plus } from 'lucide-react-native';
+import { useState } from 'react';
+import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function BookingScreen() {
   const router = useRouter();
@@ -27,17 +27,32 @@ export default function BookingScreen() {
   };
 
   const onDateChange = (event: any, selectedDate?: Date) => {
-    // For Android, selectedDate may be undefined when dismissed
     if (Platform.OS === 'android') {
       setShowDatePicker(false);
     }
-    if (selectedDate) {
-      const formatted = selectedDate.toLocaleDateString();
-      if (pickingField === 'checkIn') setCheckIn(formatted);
-      if (pickingField === 'checkOut') setCheckOut(formatted);
+    
+    if (selectedDate && pickingField) {
+      const formatted = selectedDate.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+      
+      if (pickingField === 'checkIn') {
+        setCheckIn(formatted);
+      } else if (pickingField === 'checkOut') {
+        setCheckOut(formatted);
+      }
     }
-    // keep pickingField until closed on iOS
-    if (Platform.OS === 'android') setPickingField(null);
+    
+    if (Platform.OS === 'android') {
+      setPickingField(null);
+    }
+  };
+
+  const closeDatePicker = () => {
+    setShowDatePicker(false);
+    setPickingField(null);
   };
 
   return (
@@ -53,30 +68,15 @@ export default function BookingScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Select Date</Text>
 
-          <View style={styles.dateInputs}>
-            <View style={styles.dateField}>
-              <Text style={styles.label}>Check-in</Text>
-              <TouchableOpacity style={styles.dateInput} onPress={() => openDatePicker('checkIn')}>
-                <Calendar size={20} color="#999" />
-                <Text style={styles.dateText}>{checkIn || 'Select date'}</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.dateField}>
-              <Text style={styles.label}>Check-out</Text>
-              <TouchableOpacity style={styles.dateInput} onPress={() => openDatePicker('checkOut')}>
-                <Calendar size={20} color="#999" />
-                <Text style={styles.dateText}>{checkOut || 'Select date'}</Text>
-              </TouchableOpacity>
-            </View>
-            {showDatePicker && (
-              <DateTimePicker
-                value={tempDate}
-                mode="date"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={onDateChange}
-              />
-            )}
+          <View style={styles.dateRow}>
+                      <TouchableOpacity
+                        style={styles.searchCompactHalf}
+                        onPress={() => router.push('/date-picker')}
+                      >
+                        <Calendar size={16} color="#17A2B8" />
+                        <Text style={styles.searchCompactLabel}>29 May-4 Jun</Text>
+                      </TouchableOpacity>
+            <View style={styles.dateDivider} />
           </View>
         </View>
 
@@ -156,6 +156,17 @@ export default function BookingScreen() {
           <Text style={styles.confirmButtonText}>Continue</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Date Picker Modal */}
+      {showDatePicker && (
+        <DateTimePicker
+          value={tempDate}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={onDateChange}
+          minimumDate={new Date()}
+        />
+      )}
     </View>
   );
 }
@@ -200,6 +211,44 @@ const styles = StyleSheet.create({
     color: '#1a1a1a',
     marginBottom: 16,
   },
+  dateRow: {
+    flexDirection: 'row',
+    backgroundColor: 'white',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    overflow: 'hidden',
+  },
+  dateHalf: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 10,
+  },
+  dateDivider: {
+    width: 1,
+    backgroundColor: '#e0e0e0',
+    marginVertical: 12,
+  },
+  dateTextContainer: {
+    flex: 1,
+  },
+  dateLabel: {
+    fontSize: 11,
+    color: '#666',
+    marginBottom: 4,
+    fontWeight: '500',
+  },
+  dateValue: {
+    fontSize: 13,
+    color: '#1a1a1a',
+    fontWeight: '600',
+  },
+  dateValuePlaceholder: {
+    color: '#999',
+    fontWeight: '400',
+  },
   dateInputs: {
     gap: 16,
   },
@@ -225,6 +274,11 @@ const styles = StyleSheet.create({
   dateText: {
     fontSize: 14,
     color: '#999',
+    flex: 1,
+  },
+  dateTextFilled: {
+    color: '#1a1a1a',
+    fontWeight: '500',
   },
   guestItem: {
     flexDirection: 'row',
@@ -286,5 +340,22 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
+  },
+  searchCompactHalf: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 6,
+  },
+  searchCompactLabel: {
+    fontSize: 15,
+    color: '#1a1a1a',
+    fontWeight: '500',
+    flex: 1,
   },
 });
