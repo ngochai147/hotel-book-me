@@ -14,7 +14,7 @@ RUN mvn clean package -DskipTests
 # ============================
 # 🏃 Run Stage
 # ============================
-FROM eclipse-temurin:17-jdk-alpine
+FROM openjdk:21-jdk-slim
 WORKDIR /app
 
 # Copy file JAR từ stage build sang stage run
