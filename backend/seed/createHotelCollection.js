@@ -1,7 +1,6 @@
-const mongoose = require("mongoose");
-const dotenv = require("dotenv");
-const Hotel = require("../models/Hotel");
-
+import mongoose from "mongoose";
+import dotenv from "dotenv";
+import Hotel from "./models/Hotel.js"; 
 dotenv.config();
 
 async function createCollectionAndInsert() {

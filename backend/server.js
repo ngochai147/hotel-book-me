@@ -1,42 +1,54 @@
-const express = require("express");
-const mongoose = require("mongoose");
-const cors = require("cors");
-require("dotenv").config();
-const Review = require("./models/Review");
-const Hotel = require("./models/Hotel");
+import cors from "cors";
+import dotenv from "dotenv";
+import express from "express";
+import mongoose from "mongoose";
+import Hotel from "./models/Hotel.js";
+import Review from "./models/Review.js"; // nhớ thêm .js khi import file cục bộ
+
+dotenv.config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Kết nối MongoDB
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("✅ MongoDB connected"))
-  .catch(err => console.error(err));
+// 🔌 Kết nối MongoDB
+mongoose
+    .connect(process.env.MONGO_URI)
+    .then(() => console.log("✅ MongoDB connected"))
+    .catch((err) => console.error("❌ MongoDB connection error:", err));
 
-// Routes
+// 🛣️ Routes
 app.get("/", (req, res) => res.send("API is running..."));
 
-// Lấy tất cả review
+// 📄 Lấy tất cả review
 app.get("/api/reviews", async (req, res) => {
-  const reviews = await Review.find();
-  res.json(reviews);
+    try {
+        const reviews = await Review.find();
+        res.json(reviews);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
+// 📄 Lấy tất cả hotel
 app.get("/api/hotels", async (req, res) => {
-  const hotels = await Hotel.find();
-  res.json(hotels);
+    try {
+        const hotels = await Hotel.find();
+        res.json(hotels);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-// Thêm mới review
+// ✍️ Thêm mới review
 app.post("/api/reviews", async (req, res) => {
-  try {
-    const review = new Review(req.body);
-    await review.save();
-    res.status(201).json(review);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
+    try {
+        const review = new Review(req.body);
+        await review.save();
+        res.status(201).json(review);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
 });
 
 const port = process.env.PORT || 8080;
