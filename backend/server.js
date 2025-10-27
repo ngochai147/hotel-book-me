@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 require("dotenv").config();
 const Review = require("./models/Review");
-const Hotel = require("../models/Hotel");
+const Hotel = require("./models/Hotel");
 
 const app = express();
 app.use(cors());
