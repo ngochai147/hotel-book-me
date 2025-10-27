@@ -11,17 +11,17 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 🔌 Kết nối MongoDB
+// Kết nối MongoDB
 mongoose
     .connect(process.env.MONGO_URI)
-    .then(() => console.log("✅ MongoDB connected"))
-    .catch((err) => console.error("❌ MongoDB connection error:", err));
+    .then(() => console.log("MongoDB connected"))
+    .catch((err) => console.error("MongoDB connection error:", err));
 
-// 🛣️ Routes
+// Routes
 app.get("/", (req, res) => res.send("API is running..."));
 
-// 📄 Lấy tất cả review
-app.get("/api/reviews", async (req, res) => {
+// Lấy tất cả review
+app.get("/reviews", async (req, res) => {
     try {
         const reviews = await Review.find();
         res.json(reviews);
@@ -30,8 +30,8 @@ app.get("/api/reviews", async (req, res) => {
     }
 });
 
-// 📄 Lấy tất cả hotel
-app.get("/api/hotels", async (req, res) => {
+// Lấy tất cả hotel
+app.get("/hotels", async (req, res) => {
     try {
         const hotels = await Hotel.find();
         res.json(hotels);
@@ -40,8 +40,8 @@ app.get("/api/hotels", async (req, res) => {
     }
 });
 
-// ✍️ Thêm mới review
-app.post("/api/reviews", async (req, res) => {
+// Thêm mới review
+app.post("/reviews", async (req, res) => {
     try {
         const review = new Review(req.body);
         await review.save();
