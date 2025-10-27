@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 require("dotenv").config();
 const Review = require("./models/Review");
+const Hotel = require("../models/Hotel");
 
 const app = express();
 app.use(cors());
@@ -20,6 +21,11 @@ app.get("/", (req, res) => res.send("API is running..."));
 app.get("/api/reviews", async (req, res) => {
   const reviews = await Review.find();
   res.json(reviews);
+});
+
+app.get("/api/hotels", async (req, res) => {
+  const hotels = await Hotel.find();
+  res.json(hotels);
 });
 
 // Thêm mới review
