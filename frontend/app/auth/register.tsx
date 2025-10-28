@@ -102,11 +102,11 @@ export default function RegisterScreen() {
 
         <View style={styles.socialButtons}>
           <TouchableOpacity style={styles.socialButton}>
-            <Text style={styles.socialButtonText}>G</Text>
+            <Text style={styles.socialButtonText1}>G</Text>
             <Text style={styles.socialLabel}>Google</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.socialButton}>
-            <Text style={styles.socialButtonText}>f</Text>
+            <Text style={styles.socialButtonText2}>f</Text>
             <Text style={styles.socialLabel}>Facebook</Text>
           </TouchableOpacity>
         </View>
@@ -245,8 +245,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
-  socialButtonText: {
+  socialButtonText1: {
     fontSize: 20,
+    color:'#DB4437',
+    fontWeight: 'bold',
+  },
+    socialButtonText2: {
+    fontSize: 20,
+    color:'#1877F2',
     fontWeight: 'bold',
   },
   socialLabel: {
