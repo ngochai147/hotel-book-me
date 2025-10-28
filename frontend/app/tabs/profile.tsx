@@ -92,7 +92,7 @@ export default function ProfileScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
 
 
-      {/* Profile Section */}
+      {/* Profile */}
       <View style={styles.profileSection}>
         <View style={styles.avatarContainer}>
           <View style={styles.avatar}>
@@ -110,7 +110,7 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Stats Cards */}
+      {/* Stats */}
       <View style={styles.statsContainer}>
         <View style={styles.statCard}>
           <Calendar size={24} color="#17A2B8" />
@@ -129,7 +129,7 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      {/* Account Section */}
+      {/* Account */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Account</Text>
         {menuSections.account.map((item) => (
@@ -150,7 +150,7 @@ export default function ProfileScreen() {
       </View>
 
 
-      {/* Support Section */}
+      {/* Support */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Support & About</Text>
         {menuSections.support.map((item) => (

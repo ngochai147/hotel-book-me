@@ -76,7 +76,6 @@ export default function FavoritesScreen() {
     locations: [] as string[],
   });
 
-  // Sort favorites based on selected filter
   const getSortedFavorites = () => {
     const sorted = [...favorites];
     
@@ -109,7 +108,6 @@ export default function FavoritesScreen() {
   };
 
   const handleApplyFilters = () => {
-    // In a real app, this would filter the favorites based on tempFilters
     setShowFilterModal(false);
     Alert.alert('Filters Applied', 'Your filter preferences have been saved.');
   };
@@ -214,7 +212,6 @@ export default function FavoritesScreen() {
         )}
       </ScrollView>
 
-      {/* Filter Modal */}
       <Modal
         visible={showFilterModal}
         animationType="slide"

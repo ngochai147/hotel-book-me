@@ -24,7 +24,6 @@ export default function Step4PaymentScreen() {
         <Text style={styles.title}>Booking and Payment</Text>
       </View>
 
-      {/* Progress indicator */}
       <View style={styles.progressContainer}>
         <View style={[styles.progressDot, styles.progressDotActive]} />
         <View style={[styles.progressDot, styles.progressDotActive]} />

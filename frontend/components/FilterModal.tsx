@@ -9,7 +9,6 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-// import Slider from '@react-native-community/slider';
 
 const { height } = Dimensions.get('window');
 

@@ -28,7 +28,6 @@ export default function Step3InfoScreen() {
         <Text style={styles.title}>Booking and Payment</Text>
       </View>
 
-      {/* Progress indicator */}
       <View style={styles.progressContainer}>
         <View style={[styles.progressDot, styles.progressDotActive]} />
         <View style={[styles.progressDot, styles.progressDotActive]} />
@@ -95,14 +94,6 @@ export default function Step3InfoScreen() {
               onChangeText={setPhone}
               keyboardType="phone-pad"
             />
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Book for others</Text>
-          <View style={styles.checkboxRow}>
-            <View style={styles.checkbox} />
-            <Text style={styles.checkboxLabel}>I am booking for someone else</Text>
           </View>
         </View>
       </ScrollView>

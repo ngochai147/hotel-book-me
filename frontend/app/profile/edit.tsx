@@ -43,7 +43,6 @@ export default function EditProfileScreen() {
       </View>
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-        {/* Avatar Section */}
         <View style={styles.avatarSection}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>HA</Text>
@@ -54,7 +53,6 @@ export default function EditProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Form Fields */}
         <View style={styles.form}>
           <View style={styles.formGroup}>
             <Text style={styles.label}>Full Name</Text>

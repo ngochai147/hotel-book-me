@@ -75,7 +75,6 @@ export default function BookingScreen() {
           text: 'Yes, Cancel',
           style: 'destructive',
           onPress: () => {
-            // Handle cancellation
             Alert.alert('Booking Cancelled', 'Your booking has been cancelled successfully.');
           }
         }

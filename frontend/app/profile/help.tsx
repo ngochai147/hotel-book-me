@@ -105,7 +105,6 @@ export default function HelpSupportScreen() {
           ))}
         </View>
 
-        {/* FAQs */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Frequently Asked Questions</Text>
           {faqs.map((faq) => (
@@ -119,7 +118,6 @@ export default function HelpSupportScreen() {
           ))}
         </View>
 
-        {/* Quick Links */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Quick Links</Text>
           <TouchableOpacity style={styles.linkItem}>

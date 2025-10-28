@@ -166,29 +166,6 @@ export default function AddReviewScreen() {
           )}
         </View>
 
-        {/* Category Ratings */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Rate Your Experience</Text>
-          {categories.map((category, index) => (
-            <View key={category.name} style={styles.categoryRow}>
-              <Text style={styles.categoryName}>{category.name}</Text>
-              <View style={styles.categoryStars}>
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <TouchableOpacity
-                    key={star}
-                    onPress={() => handleCategoryRating(index, star)}
-                  >
-                    <Star
-                      size={20}
-                      color="#FFD700"
-                      fill={star <= category.rating ? '#FFD700' : 'transparent'}
-                    />
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          ))}
-        </View>
 
         {/* Review Title */}
         <View style={styles.section}>

@@ -5,7 +5,7 @@ import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'rea
 
 export default function ConfirmBookingScreen() {
   const router = useRouter();
-  const { id, checkIn, checkOut, rooms, adults, children, name, email, phone, payment } = useLocalSearchParams();
+  const {  checkIn, checkOut, rooms, adults, children, name, email, phone } = useLocalSearchParams();
   const [isConfirmed, setIsConfirmed] = useState(false);
 
   const bookingDetails = {

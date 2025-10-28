@@ -74,8 +74,8 @@ export default function HomeScreen() {
   const [location, setLocation] = useState('');
   const [date, setDate] = useState('');
   const [guest, setGuest] = useState('');
-  const [hasNewNotifications] = useState(true); // Track if there are unread notifications
-  const [favoriteHotels, setFavoriteHotels] = useState<number[]>([1, 3]); // Track favorited hotel IDs
+  const [hasNewNotifications] = useState(true);
+  const [favoriteHotels, setFavoriteHotels] = useState<number[]>([1, 3]); 
 
   const handleToggleFavorite = (hotelId: number) => {
     setFavoriteHotels(prev => {
@@ -139,7 +139,7 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Recent Search Section */}
+      {/* Recent Search*/}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Recent Search</Text>
@@ -166,7 +166,7 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* Popular Hotel Section */}
+      {/* Popular Hotel */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Popular Hotel</Text>

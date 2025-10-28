@@ -30,7 +30,6 @@ export default function LanguageScreen() {
 
   const handleSelectLanguage = (code: string) => {
     setSelectedLanguage(code);
-    // In real app, you would save this to AsyncStorage and trigger app language change
     setTimeout(() => {
       router.back();
     }, 300);
