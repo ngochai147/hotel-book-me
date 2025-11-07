@@ -28,11 +28,6 @@ const reviewSchema = new mongoose.Schema(
 
 const roomSchema = new mongoose.Schema(
     {
-        roomId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "Room",
-            require: true,
-        },
         name: String,
         type: String,
         price: Number,

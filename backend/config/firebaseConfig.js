@@ -1,13 +1,16 @@
-import admin from "firebase-admin";
+// src/firebaseConfig.js
+import { initializeApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
 
-if (!admin.apps.length) {
-    admin.initializeApp({
-        credential: admin.credential.cert({
-            projectId: process.env.FIREBASE_PROJECT_ID,
-            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-            privateKey: process.env.FIREBASE_PRIVATE_KEY,
-        }),
-    });
-}
+const firebaseConfig = {
+  apiKey: "AIzaSyCmJFXOAMfZUVwh_Qnwp1docVrcB_7n7eo",
+  authDomain: "hotel-booking-app-70dce.firebaseapp.com",
+  projectId: "hotel-booking-app-70dce",
+  storageBucket: "hotel-booking-app-70dce.firebasestorage.app",
+  messagingSenderId: "373122582661",
+  appId: "1:373122582661:web:72d6c40165f6a8ce6541ec",
+  measurementId: "G-DCDWR6B8LC"
+};
 
-export default admin;
+const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
