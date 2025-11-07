@@ -71,7 +71,6 @@ export const getHotelById = async (req, res, next) => {
     try {
         const hotel = await Hotel.findById(req.params.id)
             .populate("reviews.userId", "userName avatar")
-            .populate("roomTypes.roomId");
 
         if (!hotel) {
             return res.status(404).json({
