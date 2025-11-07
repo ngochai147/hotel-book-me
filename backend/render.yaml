@@ -1,0 +1,25 @@
+services:
+    # Backend API Service
+    - type: web
+      name: hotel-booking-api
+      runtime: node
+      region: singapore
+      plan: free
+      buildCommand: npm install
+      startCommand: npm start
+      healthCheckPath: /
+      envVars:
+          - key: NODE_ENV
+            value: production
+          - key: PORT
+            value: 8080
+          - key: MONGO_URI
+            sync: false
+          - key: FIREBASE_PROJECT_ID
+            sync: false
+          - key: FIREBASE_CLIENT_EMAIL
+            sync: false
+          - key: FIREBASE_PRIVATE_KEY
+            sync: false
+          - key: ALLOWED_ORIGINS
+            sync: false

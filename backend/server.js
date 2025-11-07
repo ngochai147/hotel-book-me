@@ -2,64 +2,97 @@ import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
 import mongoose from "mongoose";
-import Hotel from "./models/Hotel.js";
-import Review from "./models/Review.js";
-import Booking from "./models/Booking.js";
+import admin from "firebase-admin";
 
+// Import routes
+import authRoutes from "./routes/authRoutes.js";
+import hotelRoutes from "./routes/hotelRoutes.js";
+import bookingRoutes from "./routes/bookingRoutes.js";
+import reviewRoutes from "./routes/reviewRoutes.js";
+import userRoutes from "./routes/userRoutes.js";
+
+// Import middlewares
+import errorHandler from "./middlewares/errorHandler.js";
+import { logger, notFound } from "./middlewares/logger.js";
+
+// Import config
+import serviceAccount from "./config/serviceAccountKey.js";
+
+// Load environment variables
 dotenv.config();
 
+// Initialize Express app
 const app = express();
-app.use(cors());
-app.use(express.json());
 
-// Kết nối MongoDB
+// Middleware
+app.use(
+    cors({
+        origin: process.env.ALLOWED_ORIGINS?.split(",") || "*",
+        credentials: true,
+    })
+);
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Logger middleware (development only)
+if (process.env.NODE_ENV === "development") {
+    app.use(logger);
+}
+
+// Initialize Firebase Admin
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+});
+
+console.log("✅ Firebase Admin initialized");
+
+// Connect to MongoDB
 mongoose
     .connect(process.env.MONGO_URI)
-    .then(() => console.log("MongoDB connected"))
-    .catch((err) => console.error("MongoDB connection error:", err));
+    .then(() => console.log("✅ MongoDB connected successfully"))
+    .catch((err) => {
+        console.error("❌ MongoDB connection error:", err);
+        process.exit(1);
+    });
 
-// Routes
-app.get("/", (req, res) => res.send("API is running..."));
-
-// Lấy tất cả review
-app.get("/reviews", async (req, res) => {
-    try {
-        const reviews = await Review.find();
-        res.json(reviews);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+// Health check route
+app.get("/", (req, res) => {
+    res.json({
+        success: true,
+        message: "Hotel Booking API is running 🚀",
+        version: "1.0.0",
+        endpoints: {
+            auth: "/api/auth",
+            hotels: "/api/hotels",
+            bookings: "/api/bookings",
+            reviews: "/api/reviews",
+            users: "/api/users",
+        },
+    });
 });
 
-// Thêm mới review
-app.post("/reviews", async (req, res) => {
-    try {
-        const review = new Review(req.body);
-        await review.save();
-        res.status(201).json(review);
-    } catch (err) {
-        res.status(400).json({ error: err.message });
-    }
+// API Routes
+app.use("/api/auth", authRoutes);
+app.use("/api/hotels", hotelRoutes);
+app.use("/api/bookings", bookingRoutes);
+app.use("/api/reviews", reviewRoutes);
+app.use("/api/users", userRoutes);
+
+// Error handling middlewares (must be last)
+app.use(notFound);
+app.use(errorHandler);
+
+// Start server
+const PORT = process.env.PORT || 8080;
+const server = app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);
 });
 
-const port = process.env.PORT || 8080;
-app.listen(port, () => console.log(`🚀 Server running on port ${port}`));
+// Handle unhandled promise rejections
+process.on("unhandledRejection", (err) => {
+    console.error("❌ Unhandled Rejection:", err);
+    server.close(() => process.exit(1));
+});
 
-// Lấy tất cả hotel
-app.get("/hotels", async (req, res) => {
-    try {
-        const hotels = await Hotel.find();
-        res.json(hotels);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-// Lấy tất cả hotel
-app.get("/bookings", async (req, res) => {
-    try {
-        const bookings = await Booking.find();
-        res.json(bookings);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
+export default app;

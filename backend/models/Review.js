@@ -3,7 +3,6 @@ import mongoose from "mongoose";
 const reviewSchema = new mongoose.Schema(
     {
         rating: { type: Number, required: true, min: 1, max: 5 },
-        title: { type: String, required: true },
         comment: String,
         userId: {
             type: mongoose.Schema.Types.ObjectId,
