@@ -15,9 +15,6 @@ import userRoutes from "./routes/userRoutes.js";
 import errorHandler from "./middlewares/errorHandler.js";
 import { logger, notFound } from "./middlewares/logger.js";
 
-// Import config
-import serviceAccount from "./config/serviceAccountKey.js";
-
 // Load environment variables
 dotenv.config();
 
