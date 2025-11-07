@@ -40,9 +40,20 @@ if (process.env.NODE_ENV === "development") {
 }
 
 // Initialize Firebase Admin
-admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-});
+if (!admin.apps.length) {
+    try {
+        admin.initializeApp({
+            credential: admin.credential.cert({
+                projectId: process.env.FIREBASE_PROJECT_ID,
+                clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+                privateKey: process.env.FIREBASE_PRIVATE_KEY,
+            }),
+        });
+        console.log("✅ Firebase Admin initialized");
+    } catch (err) {
+        console.error("❌ Firebase Admin initialization error:", err);
+    }
+}
 
 console.log("✅ Firebase Admin initialized");
 
