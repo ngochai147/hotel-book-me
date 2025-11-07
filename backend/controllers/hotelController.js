@@ -70,15 +70,12 @@ export const getAllHotels = async (req, res, next) => {
 export const getHotelById = async (req, res, next) => {
     try {
         const hotel = await Hotel.findById(req.params.id)
-            .populate("reviews.userId", "userName avatar")
-
         if (!hotel) {
             return res.status(404).json({
                 success: false,
                 message: "Hotel not found",
             });
         }
-
         res.json({
             success: true,
             data: hotel,
