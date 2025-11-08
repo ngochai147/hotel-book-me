@@ -11,14 +11,16 @@ import {
   LogOut,
   MapPin,
   Moon,
-  Settings,
   Shield,
   Star,
   User,
   Volume2
 } from 'lucide-react-native';
-import { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { useState, useEffect } from 'react';
+import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { getUserById } from '../../services/userService';
+import type { User as UserType } from '../../services/userService';
+import { auth } from '../../config/firebase';
 
 const menuSections = {
   account: [
@@ -43,8 +45,42 @@ export default function ProfileScreen() {
   const [notifications, setNotifications] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
   const [soundEffects, setSoundEffects] = useState(true);
+  const [user, setUser] = useState<UserType | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const handleLogout = () => {
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  const loadUserData = async () => {
+    try {
+      setLoading(true);
+      const currentUser = auth.currentUser;
+      
+      if (currentUser) {
+        const token=await auth.currentUser?.getIdToken();
+        if (currentUser.uid) {
+          const userId = currentUser.uid;
+          const response = await getUserById(userId, token || undefined);
+          
+          if (response.success && response.data) {
+            setUser(response.data);
+          } else {
+            // Fallback to cached data
+            setUser(currentUser as unknown as UserType );
+          }
+        } else {
+          setUser(currentUser as unknown as UserType );
+        }
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
     Alert.alert(
       'Logout',
       'Are you sure you want to logout?',
@@ -53,7 +89,9 @@ export default function ProfileScreen() {
         { 
           text: 'Logout', 
           style: 'destructive',
-          onPress: () => router.replace('/auth/login')
+          onPress: async () => {
+            router.replace('/auth/login');
+          }
         }
       ]
     );
@@ -88,6 +126,23 @@ export default function ProfileScreen() {
     }
   };
 
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#17A2B8" />
+        <Text style={styles.loadingText}>Loading profile...</Text>
+      </View>
+    );
+  }
+
+  const getInitials = (name: string) => {
+    const names = name.split(' ');
+    if (names.length >= 2) {
+      return (names[0][0] + names[1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
 
@@ -96,14 +151,17 @@ export default function ProfileScreen() {
       <View style={styles.profileSection}>
         <View style={styles.avatarContainer}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>HA</Text>
+            <Text style={styles.avatarText}>
+              {user?.displayName  ? getInitials(user.displayName ) : 'U'}
+            </Text>
           </View>
           <TouchableOpacity style={styles.cameraButton} onPress={handleEditAvatar}>
             <Camera size={16} color="white" />
           </TouchableOpacity>
         </View>
-        <Text style={styles.name}>Hasan Abdul</Text>
-        <Text style={styles.email}>hasanabdulgaffar@gmail.com</Text>
+        <Text style={styles.name}>{user?.displayName}</Text>
+        <Text style={styles.email}>{user?.email}</Text>
+        {user?.phone && <Text style={styles.phone}>{user.phone}</Text>}
         
         <TouchableOpacity style={styles.editButton} onPress={() => router.push('/profile/edit' as any)}>
           <Text style={styles.editButtonText}>Edit Profile</Text>
@@ -114,17 +172,17 @@ export default function ProfileScreen() {
       <View style={styles.statsContainer}>
         <View style={styles.statCard}>
           <Calendar size={24} color="#17A2B8" />
-          <Text style={styles.statValue}>12</Text>
+          <Text style={styles.statValue}>0</Text>
           <Text style={styles.statLabel}>Bookings</Text>
         </View>
         <View style={styles.statCard}>
           <Star size={24} color="#FFA500" />
-          <Text style={styles.statValue}>8</Text>
+          <Text style={styles.statValue}>0</Text>
           <Text style={styles.statLabel}>Reviews</Text>
         </View>
         <View style={styles.statCard}>
           <Heart size={24} color="#FF3B30" />
-          <Text style={styles.statValue}>24</Text>
+          <Text style={styles.statValue}>{user?.favorites?.length || 0}</Text>
           <Text style={styles.statLabel}>Favorites</Text>
         </View>
       </View>
@@ -268,7 +326,23 @@ const styles = StyleSheet.create({
   email: {
     fontSize: 14,
     color: '#666',
+    marginBottom: 4,
+  },
+  phone: {
+    fontSize: 14,
+    color: '#666',
     marginBottom: 16,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
   },
   editButton: {
     paddingHorizontal: 24,
