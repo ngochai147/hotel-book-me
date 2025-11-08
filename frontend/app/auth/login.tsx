@@ -1,7 +1,10 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { ChevronLeft, Eye, EyeOff } from 'lucide-react-native';
+import { loginWithToken } from '../../services/authService';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../../config/firebase';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -9,14 +12,55 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
-    if (!email || !password) {
-      setError(true);
+  const validateForm = () => {
+    if (!email.trim()) {
+      Alert.alert('Error', 'Please enter your email');
+      return false;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return false;
+    }
+    if (!password) {
+      Alert.alert('Error', 'Please enter your password');
+      return false;
+    }
+    return true;
+  };
+
+  const handleLogin = async () => {
+    if (!validateForm()) {
       return;
     }
+
+    setLoading(true);
     setError(false);
-    router.replace('/tabs');
+
+    try {
+      // Get token trong firebase
+      const {user} = await signInWithEmailAndPassword(auth, email.trim(), password);
+      const firebaseToken = await user.getIdToken();
+
+      // Co token roi gui nguoc len backend
+      const response = await loginWithToken(firebaseToken);
+
+      //neu thanh cong thi luu vao firebaseToken
+      if (response.success && response.data) {
+
+            router.replace('/tabs')
+      } else {
+        Alert.alert('Error', response.message || 'Login failed');
+        setError(true);
+      }
+    } catch (error: any) {
+      console.error('Login error:', error);
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -76,8 +120,16 @@ export default function LoginScreen() {
           <Text style={styles.forgotPassword}>Forgot Password?</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-          <Text style={styles.loginButtonText}>Login</Text>
+        <TouchableOpacity 
+          style={[styles.loginButton, loading && styles.loginButtonDisabled]} 
+          onPress={handleLogin}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="white" />
+          ) : (
+            <Text style={styles.loginButtonText}>Login</Text>
+          )}
         </TouchableOpacity>
 
         <View style={styles.divider}>
@@ -208,6 +260,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 10,
+  },
+  loginButtonDisabled: {
+    backgroundColor: '#9CD4DC',
   },
   loginButtonText: {
     color: 'white',
