@@ -1,9 +1,5 @@
 import mongoose from "mongoose";
 
-const receiptSchema = new mongoose.Schema({
-    method: String,
-});
-
 const bookingSchema = new mongoose.Schema(
     {
         bookingNumber: String,
@@ -16,13 +12,11 @@ const bookingSchema = new mongoose.Schema(
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",
         },
-        hotelId: String,
+        hotelId: Number,
         hotelName: String,
         location: String,
-        roomId: { type: mongoose.Schema.Types.ObjectId, ref: "Room" },
         roomType: String,
         image: String,
-        receipt: receiptSchema,
     },
     {
         timestamps: true,

@@ -17,7 +17,7 @@ const reviewSchema = new mongoose.Schema(
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",
         },
-        rating: String,
+        rating: Number,
         comment: String,
         date: { type: Date, default: Date.now },
     },
@@ -28,15 +28,13 @@ const reviewSchema = new mongoose.Schema(
 
 const roomSchema = new mongoose.Schema(
     {
-        roomId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "Room",
-            require: true,
-        },
+        name: String,
         type: String,
         price: Number,
         size: String,
         beds: String,
+        capacity: Number,
+        images: [String],
     },
     {
         _id: false,
@@ -44,17 +42,18 @@ const roomSchema = new mongoose.Schema(
 );
 
 const hotelSchema = new mongoose.Schema({
-    id: String,
+    id: Number,
     name: String,
     location: String,
     address: String,
-    price: String,
-    rating: String,
+    price: Number,
+    rating: Number,
     description: String,
     amenities: [String],
     checkInTime: Date,
     checkOutTime: Date,
     policies: [String],
+    photos: [String],
     coordinates: coordinatesSchema,
     roomTypes: [roomSchema],
     reviews: [reviewSchema],

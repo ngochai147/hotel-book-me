@@ -1,10 +1,13 @@
 import mongoose from "mongoose";
 
 const roomSchema = new mongoose.Schema({
-    type: { type: String, required: true },
-    price: { type: Number, required: true },
+    name: String,
+    type: String,
+    price: Number,
     size: String,
     beds: String,
+    capacity: Number,
+    images: [String],
 });
 
 const Room = mongoose.model("Room", roomSchema);
