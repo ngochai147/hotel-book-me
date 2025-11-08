@@ -1,7 +1,8 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { ChevronLeft, Eye, EyeOff } from 'lucide-react-native';
+import { register } from '../../services/authService';
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -10,9 +11,72 @@ export default function RegisterScreen() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleRegister = () => {
-    router.push('/auth/verification');
+  const validateForm = () => {
+    if (!name.trim()) {
+      Alert.alert('Error', 'Please enter your name');
+      return false;
+    }
+    if (!email.trim()) {
+      Alert.alert('Error', 'Please enter your email');
+      return false;
+    }
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return false;
+    }
+    if (!phoneNumber.trim()) {
+      Alert.alert('Error', 'Please enter your phone number');
+      return false;
+    }
+    if (!password) {
+      Alert.alert('Error', 'Please enter your password');
+      return false;
+    }
+    if (password.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters');
+      return false;
+    }
+    return true;
+  };
+
+  const handleRegister = async () => {
+    if (!validateForm()) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await register({
+        email: email.trim(),
+        password: password,
+        userName: name.trim(),
+        phone: phoneNumber.trim(),
+      });
+
+      if (response.success) {
+        Alert.alert(
+          'Success',
+          'Account created successfully!',
+          [
+            {
+              text: 'OK',
+              onPress: () => router.push('/auth/login'),
+            },
+          ]
+        );
+      } else {
+        Alert.alert('Error', response.message || 'Registration failed');
+      }
+    } catch (error) {
+      console.error('Registration error:', error);
+      Alert.alert('Error', 'Network error. Please check your connection and try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -90,8 +154,16 @@ export default function RegisterScreen() {
           </View>
         </View>
 
-        <TouchableOpacity style={styles.registerButton} onPress={handleRegister}>
-          <Text style={styles.registerButtonText}>Register</Text>
+        <TouchableOpacity 
+          style={[styles.registerButton, loading && styles.registerButtonDisabled]} 
+          onPress={handleRegister}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="white" />
+          ) : (
+            <Text style={styles.registerButtonText}>Register</Text>
+          )}
         </TouchableOpacity>
 
         <View style={styles.divider}>
@@ -208,6 +280,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 10,
+  },
+  registerButtonDisabled: {
+    backgroundColor: '#9CD4DC',
   },
   registerButtonText: {
     color: 'white',
