@@ -2,7 +2,6 @@ import express from "express";
 import {
     getAllReviews,
     getReviewsByHotel,
-    getReviewsByUser,
     getReviewById,
     createReview,
     deleteReview,
@@ -14,7 +13,6 @@ const router = express.Router();
 // Public routes
 router.get("/", getAllReviews);
 router.get("/hotel/:hotelId", getReviewsByHotel);
-router.get("/user/:userId", getReviewsByUser);
 router.get("/:id", getReviewById);
 
 // Protected routes

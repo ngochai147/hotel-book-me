@@ -67,33 +67,6 @@ export const getReviewsByUser = async (req, res, next) => {
 };
 
 /**
- * @desc    Get single review
- * @route   GET /api/reviews/:id
- * @access  Public
- */
-export const getReviewById = async (req, res, next) => {
-    try {
-        const review = await Review.findById(req.params.id)
-            .populate("userId", "userName avatar")
-            .populate("hotelId", "name location");
-
-        if (!review) {
-            return res.status(404).json({
-                success: false,
-                message: "Review not found",
-            });
-        }
-
-        res.json({
-            success: true,
-            data: review,
-        });
-    } catch (error) {
-        next(error);
-    }
-};
-
-/**
  * @desc    Create new review
  * @route   POST /api/reviews
  * @access  Private
@@ -141,18 +114,18 @@ export const createReview = async (req, res, next) => {
             });
         }
 
-        // Check if user already reviewed this hotel
-        const existingReview = await Review.findOne({
-            userId: req.user._id,
-            hotelId,
-        });
+        // // Check if user already reviewed this hotel
+        // const existingReview = await Review.findOne({
+        //     userId: req.user._id,
+        //     hotelId,
+        // });
 
-        if (existingReview) {
-            return res.status(400).json({
-                success: false,
-                message: "You have already reviewed this hotel",
-            });
-        }
+        // if (existingReview) {
+        //     return res.status(400).json({
+        //         success: false,
+        //         message: "You have already reviewed this hotel",
+        //     });
+        // }
 
         // Create review
         const review = await Review.create({

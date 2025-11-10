@@ -380,28 +380,3 @@ export const cancelBooking = async (req, res, next) => {
     }
 };
 
-/**
- * @desc    Get booking statistics
- * @route   GET /api/bookings/stats
- * @access  Private (Admin)
- */
-export const getBookingStats = async (req, res, next) => {
-    try {
-        const stats = await Booking.aggregate([
-            {
-                $group: {
-                    _id: "$status",
-                    count: { $sum: 1 },
-                    totalRevenue: { $sum: "$totalPrice" },
-                },
-            },
-        ]);
-
-        res.json({
-            success: true,
-            data: stats,
-        });
-    } catch (error) {
-        next(error);
-    }
-};

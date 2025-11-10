@@ -6,7 +6,6 @@ import {
     createBooking,
     updateBooking,
     cancelBooking,
-    getBookingStats,
 } from "../controllers/bookingController.js";
 import { verifyToken } from "../middlewares/verifyToken.js";
 
@@ -24,6 +23,5 @@ router.delete("/:id", cancelBooking);
 
 // Admin routes (you can add admin middleware)
 router.get("/", getAllBookings);
-router.get("/stats", getBookingStats);
 
 export default router;
