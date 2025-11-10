@@ -106,7 +106,7 @@ export const getBookingById = async (req, res, next) => {
  */
 export const createBooking = async (req, res, next) => {
     try {
-        const { hotelId, checkIn, checkOut, guests, roomTypes, totalPrice } =
+        const { hotelId, checkIn, checkOut, guests, roomType, totalPrice } =
             req.body;
 
         // Validate required fields
@@ -115,15 +115,15 @@ export const createBooking = async (req, res, next) => {
             !checkIn ||
             !checkOut ||
             !guests ||
-            !roomTypes ||
-            !Array.isArray(roomTypes) ||
-            roomTypes.length === 0 ||
+            !roomType ||
+            !Array.isArray(roomType) ||
+            roomType.length === 0 ||
             !totalPrice
         ) {
             return res.status(400).json({
                 success: false,
                 message:
-                    "Please provide all required fields. roomTypes must be a non-empty array.",
+                    "Please provide all required fields. roomType must be a non-empty array.",
             });
         }
 
@@ -164,12 +164,12 @@ export const createBooking = async (req, res, next) => {
 
         // Verify all room types exist in hotel
         const invalidRoomTypes = [];
-        for (const roomType of roomTypes) {
+        for (const roomTypeName of roomType) {
             const exists = hotel.roomTypes.some(
-                (room) => room.name === roomType
+                (room) => room.name === roomTypeName
             );
             if (!exists) {
-                invalidRoomTypes.push(roomType);
+                invalidRoomTypes.push(roomTypeName);
             }
         }
 
@@ -193,11 +193,11 @@ export const createBooking = async (req, res, next) => {
         const checkOutEndOfDay = new Date(checkOutDate);
         checkOutEndOfDay.setHours(23, 59, 59, 999);
 
-        for (const roomType of roomTypes) {
+        for (const roomTypeName of roomType) {
             // Get all upcoming bookings for this room type
             const allUpcomingBookings = await Booking.find({
                 hotelId: hotelId,
-                roomTypes: roomType,
+                roomType: roomTypeName,
                 status: "upcoming",
             });
 
@@ -230,7 +230,7 @@ export const createBooking = async (req, res, next) => {
 
             if (overlappingBookings.length > 0) {
                 unavailableRooms.push({
-                    roomType,
+                    roomType: roomTypeName,
                     conflicts: overlappingBookings.map((b) => ({
                         bookingNumber: b.bookingNumber,
                         checkIn: b.checkIn,
@@ -261,7 +261,7 @@ export const createBooking = async (req, res, next) => {
             hotelId: hotel._id,
             hotelName: hotel.name,
             location: hotel.location,
-            roomTypes, // Lưu mảng room types
+            roomType, // Lưu mảng room types
             checkIn: checkInDate,
             checkOut: checkOutDate,
             guests,
