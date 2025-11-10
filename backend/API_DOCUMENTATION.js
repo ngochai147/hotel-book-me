@@ -1,8 +1,11 @@
 /**
- * API Documentation
+ * API Documentation - Hotel Booking System
  *
  * Base URL: http://localhost:8080 (development)
  * Production URL: https://your-app.onrender.com
+ *
+ * All protected routes require Firebase Authentication Token in headers:
+ * Authorization: Bearer <firebase-id-token>
  */
 
 // ============================================
@@ -85,6 +88,23 @@
  * }
  */
 
+/**
+ * @route   POST /api/auth/logout
+ * @desc    Logout user (mainly client-side, token revocation)
+ * @access  Private
+ *
+ * @headers
+ * {
+ *   "Authorization": "Bearer firebase-id-token"
+ * }
+ *
+ * @response 200
+ * {
+ *   "success": true,
+ *   "message": "Logout successful"
+ * }
+ */
+
 // ============================================
 // HOTEL ENDPOINTS
 // ============================================
@@ -147,36 +167,14 @@
  * @example GET /api/hotels/search/hanoi
  */
 
-/**
- * @route   POST /api/hotels
- * @desc    Create new hotel (Admin)
- * @access  Private
- *
- * @headers
- * {
- *   "Authorization": "Bearer firebase-id-token"
- * }
- *
- * @body
- * {
- *   "name": "Hotel Name",
- *   "location": "Hanoi",
- *   "address": "123 Street",
- *   "price": 200,
- *   "amenities": ["WiFi", "Pool"],
- *   "photos": ["url1", "url2"],
- *   ...
- * }
- */
-
 // ============================================
 // BOOKING ENDPOINTS
 // ============================================
 
 /**
- * @route   GET /api/bookings/my-bookings
- * @desc    Get user's bookings
- * @access  Private
+ * @route   GET /api/bookings
+ * @desc    Get all bookings (Admin only)
+ * @access  Private/Admin
  *
  * @headers
  * {
@@ -186,8 +184,76 @@
  * @response 200
  * {
  *   "success": true,
+ *   "count": 50,
+ *   "data": [
+ *     {
+ *       "_id": "booking-id",
+ *       "bookingNumber": "BK1731234567890",
+ *       "userId": {
+ *         "_id": "user-id",
+ *         "userName": "John Doe",
+ *         "email": "user@example.com",
+ *         "phone": "0123456789"
+ *       },
+ *       "hotelId": "hotel-id",
+ *       "status": "upcoming",
+ *       "checkIn": "2024-12-20T00:00:00.000Z",
+ *       "checkOut": "2024-12-25T00:00:00.000Z",
+ *       "guests": 2,
+ *       "roomType": ["Deluxe Room"],
+ *       "totalPrice": 1000,
+ *       "createdAt": "2024-11-10T10:00:00.000Z"
+ *     }
+ *   ]
+ * }
+ */
+
+/**
+ * @route   GET /api/bookings/my-bookings
+ * @desc    Get user's bookings (with optional status filter)
+ * @access  Private
+ *
+ * @headers
+ * {
+ *   "Authorization": "Bearer firebase-id-token"
+ * }
+ *
+ * @query
+ * - status: string (optional) - Filter by "upcoming", "completed", or "cancelled"
+ *
+ * @example GET /api/bookings/my-bookings
+ * @example GET /api/bookings/my-bookings?status=upcoming
+ * @example GET /api/bookings/my-bookings?status=completed
+ *
+ * @response 200
+ * {
+ *   "success": true,
  *   "count": 3,
- *   "data": [...]
+ *   "data": [
+ *     {
+ *       "_id": "booking-id",
+ *       "bookingNumber": "BK1731234567890",
+ *       "status": "upcoming",
+ *       "hotelId": {
+ *         "_id": "hotel-id",
+ *         "name": "Grand Hotel",
+ *         "location": "Hanoi",
+ *         "photos": ["url"],
+ *         "rating": 4.5
+ *       },
+ *       "roomType": ["Deluxe Room"],
+ *       "checkIn": "2024-12-20T00:00:00.000Z",
+ *       "checkOut": "2024-12-25T00:00:00.000Z",
+ *       "guests": 2,
+ *       "totalPrice": 1000
+ *     }
+ *   ]
+ * }
+ *
+ * @response 400 Invalid Status
+ * {
+ *   "success": false,
+ *   "message": "Invalid status. Valid statuses are: upcoming, completed, cancelled"
  * }
  */
 
@@ -207,49 +273,68 @@
  *   "checkIn": "2024-12-20",
  *   "checkOut": "2024-12-25",
  *   "guests": 2,
- *   "roomTypes": ["Deluxe Room", "Standard Room"],
+ *   "roomType": ["Deluxe Room", "Standard Room"],
  *   "totalPrice": 1000
  * }
  *
  * @businessRules
  * - User must be authenticated
- * - checkIn date must be before checkOut date
- * - roomTypes must be a non-empty array
+ * - checkIn date cannot be in the past
+ * - checkOut date must be after checkIn date
+ * - roomType must be a non-empty array
  * - Each roomType must exist in hotel.roomTypes[].name
- * - Each roomType must be available (not booked) for the selected dates
+ * - Each roomType must be available (not booked by UPCOMING bookings) for the selected dates
+ * - Completed and cancelled bookings do NOT block availability
+ * - Date comparison ignores time component (only compares dates)
  * - Status will be set to "upcoming" automatically
- * - Booking number is auto-generated: "BK" + timestamp
+ * - Booking number is auto-generated: "BK" + timestamp + random
  *
  * @response 201 Success
  * {
  *   "success": true,
  *   "message": "Booking created successfully",
  *   "data": {
- *     "bookingNumber": "BK1731234567890",
+ *     "bookingNumber": "BK1731234567890123",
  *     "status": "upcoming",
  *     "userId": "user-id",
  *     "hotelId": "hotel-id",
- *     "roomTypes": ["Deluxe Room", "Standard Room"],
+ *     "hotelName": "Grand Hotel",
+ *     "location": "Hanoi",
+ *     "roomType": ["Deluxe Room", "Standard Room"],
  *     "checkIn": "2024-12-20T00:00:00.000Z",
  *     "checkOut": "2024-12-25T00:00:00.000Z",
  *     "guests": 2,
  *     "totalPrice": 1000,
+ *     "image": "hotel-photo-url",
  *     "createdAt": "2024-11-10T10:00:00.000Z"
  *   }
+ * }
+ *
+ * @response 400 Past Check-in Date
+ * {
+ *   "success": false,
+ *   "message": "Check-in date cannot be in the past"
+ * }
+ *
+ * @response 400 Invalid Date Range
+ * {
+ *   "success": false,
+ *   "message": "Check-out date must be after check-in date"
  * }
  *
  * @response 400 Room Not Available
  * {
  *   "success": false,
- *   "message": "Some room types are not available for the selected dates",
+ *   "message": "Some room types are not available for the selected dates.",
  *   "unavailableRooms": [
  *     {
  *       "roomType": "Deluxe Room",
- *       "conflictingBookings": [
+ *       "conflicts": [
  *         {
  *           "bookingNumber": "BK1731234567890",
  *           "checkIn": "2024-12-18T00:00:00.000Z",
- *           "checkOut": "2024-12-22T00:00:00.000Z"
+ *           "checkOut": "2024-12-22T00:00:00.000Z",
+ *           "status": "upcoming"
  *         }
  *       ]
  *     }
@@ -259,49 +344,64 @@
  * @response 400 Invalid Room Type
  * {
  *   "success": false,
- *   "message": "Room type 'Deluxe Room' does not exist in this hotel"
+ *   "message": "The following room types are not available in this hotel: Premium Suite"
+ * }
+ *
+ * @response 404 Hotel Not Found
+ * {
+ *   "success": false,
+ *   "message": "Hotel not found"
  * }
  */
 
 /**
- * @route   GET /api/bookings/my-bookings?status=upcoming
- * @desc    Get user's bookings filtered by status
- * @access  Private
+ * @route   PUT /api/bookings/:id
+ * @desc    Update booking status
+ * @access  Private (Owner only)
  *
  * @headers
  * {
  *   "Authorization": "Bearer firebase-id-token"
  * }
  *
- * @query
- * - status: string (optional) - Filter by status: "upcoming", "completed", "cancelled"
+ * @body
+ * {
+ *   "status": "completed"
+ * }
  *
- * @example GET /api/bookings/my-bookings?status=upcoming
- * @example GET /api/bookings/my-bookings?status=completed
+ * @businessRules
+ * - Only booking owner can update
+ * - Status must be one of: "upcoming", "completed", "cancelled"
+ * - Cannot modify a cancelled booking
  *
  * @response 200
  * {
  *   "success": true,
- *   "count": 3,
- *   "data": [
- *     {
- *       "_id": "booking-id",
- *       "bookingNumber": "BK1731234567890",
- *       "status": "upcoming",
- *       "userId": "user-id",
- *       "hotelId": {
- *         "_id": "hotel-id",
- *         "name": "Hotel Name",
- *         "location": "Hanoi",
- *         "photos": ["url"]
- *       },
- *       "roomTypes": ["Deluxe Room"],
- *       "checkIn": "2024-12-20T00:00:00.000Z",
- *       "checkOut": "2024-12-25T00:00:00.000Z",
- *       "guests": 2,
- *       "totalPrice": 1000
- *     }
- *   ]
+ *   "message": "Booking updated successfully",
+ *   "data": {
+ *     "_id": "booking-id",
+ *     "bookingNumber": "BK1731234567890",
+ *     "status": "completed",
+ *     ...
+ *   }
+ * }
+ *
+ * @response 400 Invalid Status
+ * {
+ *   "success": false,
+ *   "message": "Invalid status. Must be one of: upcoming, completed, cancelled"
+ * }
+ *
+ * @response 400 Cancelled Booking
+ * {
+ *   "success": false,
+ *   "message": "Cannot modify a cancelled booking"
+ * }
+ *
+ * @response 403
+ * {
+ *   "success": false,
+ *   "message": "Not authorized to update this booking"
  * }
  */
 
@@ -345,8 +445,10 @@
  *
  * @businessRules
  * - Only the booking owner can cancel
- * - Booking is not deleted, status is changed to "cancelled"
+ * - Booking is NOT deleted from database
+ * - Status is changed to "cancelled"
  * - Keeps booking history for records
+ * - Cancelled bookings do NOT block room availability
  *
  * @response 200
  * {
@@ -356,7 +458,9 @@
  *     "_id": "booking-id",
  *     "bookingNumber": "BK1731234567890",
  *     "status": "cancelled",
- *     ...
+ *     "hotelId": "hotel-id",
+ *     "checkIn": "2024-12-20T00:00:00.000Z",
+ *     "checkOut": "2024-12-25T00:00:00.000Z"
  *   }
  * }
  *
@@ -365,6 +469,12 @@
  *   "success": false,
  *   "message": "Not authorized to cancel this booking"
  * }
+ *
+ * @response 404
+ * {
+ *   "success": false,
+ *   "message": "Booking not found"
+ * }
  */
 
 // ============================================
@@ -372,15 +482,85 @@
 // ============================================
 
 /**
+ * @route   GET /api/reviews
+ * @desc    Get all reviews (all hotels)
+ * @access  Public
+ *
+ * @response 200
+ * {
+ *   "success": true,
+ *   "count": 50,
+ *   "data": [
+ *     {
+ *       "_id": "review-id",
+ *       "rating": 5,
+ *       "comment": "Excellent hotel!",
+ *       "userId": {
+ *         "_id": "user-id",
+ *         "userName": "John Doe",
+ *         "avatar": "url"
+ *       },
+ *       "hotelId": {
+ *         "_id": "hotel-id",
+ *         "name": "Grand Hotel",
+ *         "location": "Hanoi"
+ *       },
+ *       "createdAt": "2024-11-10T10:00:00.000Z"
+ *     }
+ *   ]
+ * }
+ */
+
+/**
  * @route   GET /api/reviews/hotel/:hotelId
- * @desc    Get reviews by hotel
+ * @desc    Get reviews by hotel ID
  * @access  Public
  *
  * @response 200
  * {
  *   "success": true,
  *   "count": 5,
- *   "data": [...]
+ *   "data": [
+ *     {
+ *       "_id": "review-id",
+ *       "rating": 5,
+ *       "comment": "Great experience!",
+ *       "userId": {
+ *         "_id": "user-id",
+ *         "userName": "John Doe",
+ *         "avatar": "url"
+ *       },
+ *       "hotelId": "hotel-id",
+ *       "createdAt": "2024-11-10T10:00:00.000Z"
+ *     }
+ *   ]
+ * }
+ */
+
+/**
+ * @route   GET /api/reviews/user/:userId
+ * @desc    Get reviews by user ID
+ * @access  Public
+ *
+ * @response 200
+ * {
+ *   "success": true,
+ *   "count": 3,
+ *   "data": [
+ *     {
+ *       "_id": "review-id",
+ *       "rating": 4,
+ *       "comment": "Nice hotel",
+ *       "userId": "user-id",
+ *       "hotelId": {
+ *         "_id": "hotel-id",
+ *         "name": "Grand Hotel",
+ *         "location": "Hanoi",
+ *         "photos": ["url"]
+ *       },
+ *       "createdAt": "2024-11-10T10:00:00.000Z"
+ *     }
+ *   ]
  * }
  */
 
@@ -403,11 +583,12 @@
  *
  * @businessRules
  * - User must be authenticated
- * - User must have a COMPLETED booking at this hotel
- * - Only one review per user per hotel
+ * - User must have at least ONE COMPLETED booking at this hotel
+ * - User CAN write multiple reviews (duplicate check is commented out)
  * - Rating must be between 1 and 5
- * - Review is automatically embedded in hotel.reviews (max 5 latest)
- * - Hotel's average rating is recalculated
+ * - Review is automatically embedded in hotel.reviews array
+ * - Only 5 latest reviews are kept in hotel.reviews array
+ * - Hotel's average rating is recalculated from ALL reviews in Review collection
  *
  * @response 201 Success
  * {
@@ -427,16 +608,28 @@
  *   }
  * }
  *
- * @response 400 No Completed Booking
+ * @response 403 No Completed Booking
  * {
  *   "success": false,
  *   "message": "You can only review hotels where you have a completed booking"
  * }
  *
- * @response 400 Duplicate Review
+ * @response 400 Invalid Rating
  * {
  *   "success": false,
- *   "message": "You have already reviewed this hotel"
+ *   "message": "Rating must be between 1 and 5"
+ * }
+ *
+ * @response 400 Missing Required Fields
+ * {
+ *   "success": false,
+ *   "message": "Hotel ID and rating are required"
+ * }
+ *
+ * @response 404 Hotel Not Found
+ * {
+ *   "success": false,
+ *   "message": "Hotel not found"
  * }
  */
 
@@ -452,9 +645,10 @@
  *
  * @businessRules
  * - Only the review owner can delete
- * - Review is removed from Review collection
- * - Review is removed from hotel.reviews (if present)
- * - Hotel's average rating is recalculated
+ * - Review is permanently removed from Review collection
+ * - Review is removed from hotel.reviews array (if present)
+ * - Hotel's average rating is recalculated from remaining reviews
+ * - If no reviews remain, hotel rating is set to 0
  *
  * @response 200
  * {
@@ -467,6 +661,12 @@
  *   "success": false,
  *   "message": "Not authorized to delete this review"
  * }
+ *
+ * @response 404
+ * {
+ *   "success": false,
+ *   "message": "Review not found"
+ * }
  */
 
 // ============================================
@@ -474,20 +674,70 @@
 // ============================================
 
 /**
+ * @route   GET /api/users
+ * @desc    Get all users (Admin only)
+ * @access  Private/Admin
+ *
+ * @headers
+ * {
+ *   "Authorization": "Bearer firebase-id-token"
+ * }
+ *
+ * @response 200
+ * {
+ *   "success": true,
+ *   "count": 50,
+ *   "data": [
+ *     {
+ *       "_id": "user-id",
+ *       "uid": "firebase-uid",
+ *       "userName": "John Doe",
+ *       "email": "user@example.com",
+ *       "phone": "0123456789",
+ *       "avatar": "url",
+ *       "favorites": ["hotel-id-1", "hotel-id-2"]
+ *     }
+ *   ]
+ * }
+ */
+
+/**
  * @route   GET /api/users/:id
  * @desc    Get user by ID
  * @access  Private
+ *
+ * @headers
+ * {
+ *   "Authorization": "Bearer firebase-id-token"
+ * }
  *
  * @response 200
  * {
  *   "success": true,
  *   "data": {
  *     "_id": "user-id",
+ *     "uid": "firebase-uid",
  *     "userName": "John Doe",
  *     "email": "user@example.com",
  *     "phone": "0123456789",
- *     "favorites": [...]
+ *     "avatar": "url",
+ *     "favorites": [
+ *       {
+ *         "_id": "hotel-id",
+ *         "name": "Grand Hotel",
+ *         "location": "Hanoi",
+ *         "photos": ["url"],
+ *         "price": 150,
+ *         "rating": 4.5
+ *       }
+ *     ]
  *   }
+ * }
+ *
+ * @response 404
+ * {
+ *   "success": false,
+ *   "message": "User not found"
  * }
  */
 
@@ -496,11 +746,80 @@
  * @desc    Update user profile
  * @access  Private (Owner only)
  *
+ * @headers
+ * {
+ *   "Authorization": "Bearer firebase-id-token"
+ * }
+ *
  * @body
  * {
  *   "userName": "New Name",
  *   "phone": "0987654321",
- *   "avatar": "new-url"
+ *   "avatar": "new-avatar-url"
+ * }
+ *
+ * @businessRules
+ * - User can only update their own profile
+ * - Only userName, phone, and avatar can be updated
+ * - Email and uid cannot be changed
+ *
+ * @response 200
+ * {
+ *   "success": true,
+ *   "message": "User updated successfully",
+ *   "data": {
+ *     "_id": "user-id",
+ *     "userName": "New Name",
+ *     "phone": "0987654321",
+ *     "avatar": "new-avatar-url",
+ *     ...
+ *   }
+ * }
+ *
+ * @response 403
+ * {
+ *   "success": false,
+ *   "message": "Not authorized to update this profile"
+ * }
+ *
+ * @response 404
+ * {
+ *   "success": false,
+ *   "message": "User not found"
+ * }
+ */
+
+/**
+ * @route   DELETE /api/users/:id
+ * @desc    Delete user account
+ * @access  Private (Owner only)
+ *
+ * @headers
+ * {
+ *   "Authorization": "Bearer firebase-id-token"
+ * }
+ *
+ * @businessRules
+ * - User can only delete their own account
+ * - Account is permanently removed
+ * - Related bookings and reviews remain in database
+ *
+ * @response 200
+ * {
+ *   "success": true,
+ *   "message": "User deleted successfully"
+ * }
+ *
+ * @response 403
+ * {
+ *   "success": false,
+ *   "message": "Not authorized to delete this account"
+ * }
+ *
+ * @response 404
+ * {
+ *   "success": false,
+ *   "message": "User not found"
  * }
  */
 
@@ -515,8 +834,8 @@
  * }
  *
  * @businessRules
- * - User can only access their own favorites
  * - Returns full hotel details (populated)
+ * - Shows name, location, photos, price, rating, amenities
  *
  * @response 200
  * {
@@ -525,27 +844,29 @@
  *   "data": [
  *     {
  *       "_id": "hotel-id-1",
- *       "name": "Hotel Name 1",
+ *       "name": "Grand Hotel",
  *       "location": "Hanoi",
- *       "address": "123 Street",
+ *       "photos": ["url1", "url2"],
  *       "price": 200,
  *       "rating": 4.5,
- *       "amenities": ["WiFi", "Pool"],
- *       "photos": ["url1", "url2"],
- *       "roomTypes": [...]
+ *       "amenities": ["WiFi", "Pool", "Gym"]
  *     },
  *     {
  *       "_id": "hotel-id-2",
- *       "name": "Hotel Name 2",
- *       ...
+ *       "name": "Beach Resort",
+ *       "location": "Da Nang",
+ *       "photos": ["url"],
+ *       "price": 250,
+ *       "rating": 4.8,
+ *       "amenities": ["WiFi", "Pool", "Beach Access"]
  *     }
  *   ]
  * }
  *
- * @response 403
+ * @response 404
  * {
  *   "success": false,
- *   "message": "Not authorized to access this resource"
+ *   "message": "User not found"
  * }
  */
 
@@ -561,36 +882,50 @@
  *
  * @businessRules
  * - User can only add to their own favorites
- * - Hotel must exist
- * - Duplicate prevention - won't add if already in favorites
+ * - Hotel must exist in database
+ * - Duplicate prevention - returns error if already in favorites
+ * - Returns populated favorites list after adding
  *
  * @response 200 Success
  * {
  *   "success": true,
  *   "message": "Hotel added to favorites",
  *   "data": [
- *     "hotel-id-1",
- *     "hotel-id-2",
- *     "hotel-id-3"
+ *     {
+ *       "_id": "hotel-id-1",
+ *       "name": "Grand Hotel",
+ *       "location": "Hanoi",
+ *       "photos": ["url"],
+ *       "price": 150,
+ *       "rating": 4.5
+ *     },
+ *     {
+ *       "_id": "hotel-id-2",
+ *       "name": "Beach Resort",
+ *       "location": "Da Nang",
+ *       "photos": ["url"],
+ *       "price": 200,
+ *       "rating": 4.8
+ *     }
  *   ]
  * }
  *
  * @response 400 Already in Favorites
  * {
  *   "success": false,
- *   "message": "Hotel is already in your favorites"
+ *   "message": "Hotel already in favorites"
  * }
  *
- * @response 404
+ * @response 404 User Not Found
  * {
  *   "success": false,
- *   "message": "Hotel not found"
+ *   "message": "User not found"
  * }
  *
  * @response 403
  * {
  *   "success": false,
- *   "message": "Not authorized to access this resource"
+ *   "message": "Not authorized to update favorites"
  * }
  */
 
@@ -606,22 +941,35 @@
  *
  * @businessRules
  * - User can only remove from their own favorites
- * - Returns updated favorites list after removal
+ * - Returns populated favorites list after removal
+ * - No error if hotel was not in favorites
  *
  * @response 200
  * {
  *   "success": true,
  *   "message": "Hotel removed from favorites",
  *   "data": [
- *     "hotel-id-1",
- *     "hotel-id-2"
+ *     {
+ *       "_id": "hotel-id-1",
+ *       "name": "Grand Hotel",
+ *       "location": "Hanoi",
+ *       "photos": ["url"],
+ *       "price": 150,
+ *       "rating": 4.5
+ *     }
  *   ]
+ * }
+ *
+ * @response 404
+ * {
+ *   "success": false,
+ *   "message": "User not found"
  * }
  *
  * @response 403
  * {
  *   "success": false,
- *   "message": "Not authorized to access this resource"
+ *   "message": "Not authorized to update favorites"
  * }
  */
 
@@ -824,22 +1172,29 @@
  * BOOKINGS:
  * - Status flow: "upcoming" -> "completed" or "cancelled"
  * - Room availability checked per room type
+ * - Only UPCOMING bookings block room availability
+ * - Completed and cancelled bookings do NOT block rooms
+ * - Date comparison ignores time component (normalized to 00:00:00)
  * - Overlapping dates block same room type
  * - Can book multiple room types in one booking
- * - Cancellation keeps booking record
+ * - Cancellation keeps booking record (soft delete)
  *
  * REVIEWS:
- * - Requires completed booking at hotel
- * - One review per user per hotel
- * - Rating: 1-5 stars
- * - Auto-updates hotel average rating
- * - Max 5 latest reviews embedded in hotel
+ * - Requires at least one completed booking at hotel
+ * - Multiple reviews per user per hotel allowed (duplicate check commented out)
+ * - Rating: 1-5 stars (required)
+ * - Comment is optional
+ * - Auto-updates hotel average rating from all reviews
+ * - Max 5 latest reviews embedded in hotel.reviews array
+ * - Full review history stored in Review collection
  *
  * FAVORITES:
  * - User can add/remove any hotel
- * - Duplicate prevention
- * - Returns populated hotel details
- * - Only owner can manage their favorites
+ * - Duplicate prevention (error if already in favorites)
+ * - Returns populated hotel details (name, location, photos, price, rating, amenities)
+ * - User can only manage their own favorites
+ * - GET /api/users/:id/favorites returns full hotel objects
+ * - POST/DELETE return updated favorites list
  *
  * AUTHENTICATION:
  * - Firebase Auth required for all private routes
