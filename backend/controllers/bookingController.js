@@ -23,15 +23,35 @@ export const getAllBookings = async (req, res, next) => {
 };
 
 /**
- * @desc    Get user bookings
- * @route   GET /api/bookings/my-bookings
+ * @desc    Get user bookings with optional status filter
+ * @route   GET /api/bookings/my-bookings?status=upcoming
  * @access  Private
  */
 export const getUserBookings = async (req, res, next) => {
     try {
         const userId = req.user._id;
+        const { status } = req.query;
 
-        const bookings = await Booking.find({ userId }).sort({ createdAt: -1 });
+        // Build query
+        const query = { userId };
+
+        // Add status filter if provided
+        if (status) {
+            const validStatuses = ["upcoming", "completed", "cancelled"];
+            if (!validStatuses.includes(status)) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Invalid status. Valid statuses are: ${validStatuses.join(
+                        ", "
+                    )}`,
+                });
+            }
+            query.status = status;
+        }
+
+        const bookings = await Booking.find(query)
+            .populate("hotelId", "name location photos rating")
+            .sort({ createdAt: -1 });
 
         res.json({
             success: true,
@@ -110,6 +130,11 @@ export const createBooking = async (req, res, next) => {
         // Validate dates
         const checkInDate = new Date(checkIn);
         const checkOutDate = new Date(checkOut);
+
+        // Normalize dates to ignore time (set to start of day)
+        checkInDate.setHours(0, 0, 0, 0);
+        checkOutDate.setHours(0, 0, 0, 0);
+
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
@@ -158,23 +183,27 @@ export const createBooking = async (req, res, next) => {
         }
 
         // Check availability for each room type
+        // Only check against "upcoming" bookings (ignore completed and cancelled)
         const unavailableRooms = [];
 
         for (const roomType of roomTypes) {
             const overlappingBookings = await Booking.find({
                 hotelId: hotelId,
                 roomTypes: roomType, // Kiểm tra nếu roomType nằm trong mảng roomTypes
-                status: { $in: ["upcoming", "completed"] },
+                status: "upcoming", // CHỈ kiểm tra bookings đang upcoming
                 $or: [
                     {
+                        // Booking starts before or on checkIn and ends after checkIn
                         checkIn: { $lte: checkInDate },
                         checkOut: { $gt: checkInDate },
                     },
                     {
+                        // Booking starts before checkOut and ends on or after checkOut
                         checkIn: { $lt: checkOutDate },
                         checkOut: { $gte: checkOutDate },
                     },
                     {
+                        // Booking is completely within the requested dates
                         checkIn: { $gte: checkInDate },
                         checkOut: { $lte: checkOutDate },
                     },
@@ -188,6 +217,7 @@ export const createBooking = async (req, res, next) => {
                         bookingNumber: b.bookingNumber,
                         checkIn: b.checkIn,
                         checkOut: b.checkOut,
+                        status: b.status,
                     })),
                 });
             }

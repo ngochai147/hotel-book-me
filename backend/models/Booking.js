@@ -24,7 +24,7 @@ const bookingSchema = new mongoose.Schema(
         },
         hotelName: String,
         location: String,
-        roomTypes: [String], // Danh sách room types đã đặt (có thể đặt nhiều phòng)
+        roomType: [String], // Danh sách room types đã đặt (có thể đặt nhiều phòng)
         image: String,
     },
     {
