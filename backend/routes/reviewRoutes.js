@@ -5,7 +5,6 @@ import {
     getReviewsByUser,
     getReviewById,
     createReview,
-    updateReview,
     deleteReview,
 } from "../controllers/reviewController.js";
 import { verifyToken } from "../middlewares/verifyToken.js";
@@ -20,7 +19,6 @@ router.get("/:id", getReviewById);
 
 // Protected routes
 router.post("/", verifyToken, createReview);
-router.put("/:id", verifyToken, updateReview);
 router.delete("/:id", verifyToken, deleteReview);
 
 export default router;

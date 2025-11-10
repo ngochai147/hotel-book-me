@@ -86,7 +86,7 @@ export const getBookingById = async (req, res, next) => {
  */
 export const createBooking = async (req, res, next) => {
     try {
-        const { hotelId, checkIn, checkOut, guests, roomType, totalPrice } =
+        const { hotelId, checkIn, checkOut, guests, roomTypes, totalPrice } =
             req.body;
 
         // Validate required fields
@@ -95,22 +95,109 @@ export const createBooking = async (req, res, next) => {
             !checkIn ||
             !checkOut ||
             !guests ||
-            !roomType ||
+            !roomTypes ||
+            !Array.isArray(roomTypes) ||
+            roomTypes.length === 0 ||
             !totalPrice
         ) {
             return res.status(400).json({
                 success: false,
-                message: "Please provide all required fields",
+                message:
+                    "Please provide all required fields. roomTypes must be a non-empty array.",
+            });
+        }
+
+        // Validate dates
+        const checkInDate = new Date(checkIn);
+        const checkOutDate = new Date(checkOut);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        if (checkInDate < today) {
+            return res.status(400).json({
+                success: false,
+                message: "Check-in date cannot be in the past",
+            });
+        }
+
+        if (checkOutDate <= checkInDate) {
+            return res.status(400).json({
+                success: false,
+                message: "Check-out date must be after check-in date",
             });
         }
 
         // Get hotel information
-        const hotel = await Hotel.findOne({ id: hotelId });
+        const hotel = await Hotel.findById(hotelId);
 
         if (!hotel) {
             return res.status(404).json({
                 success: false,
                 message: "Hotel not found",
+            });
+        }
+
+        // Verify all room types exist in hotel
+        const invalidRoomTypes = [];
+        for (const roomType of roomTypes) {
+            const exists = hotel.roomTypes.some(
+                (room) => room.name === roomType
+            );
+            if (!exists) {
+                invalidRoomTypes.push(roomType);
+            }
+        }
+
+        if (invalidRoomTypes.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: `The following room types are not available in this hotel: ${invalidRoomTypes.join(
+                    ", "
+                )}`,
+            });
+        }
+
+        // Check availability for each room type
+        const unavailableRooms = [];
+
+        for (const roomType of roomTypes) {
+            const overlappingBookings = await Booking.find({
+                hotelId: hotelId,
+                roomTypes: roomType, // Kiểm tra nếu roomType nằm trong mảng roomTypes
+                status: { $in: ["upcoming", "completed"] },
+                $or: [
+                    {
+                        checkIn: { $lte: checkInDate },
+                        checkOut: { $gt: checkInDate },
+                    },
+                    {
+                        checkIn: { $lt: checkOutDate },
+                        checkOut: { $gte: checkOutDate },
+                    },
+                    {
+                        checkIn: { $gte: checkInDate },
+                        checkOut: { $lte: checkOutDate },
+                    },
+                ],
+            });
+
+            if (overlappingBookings.length > 0) {
+                unavailableRooms.push({
+                    roomType,
+                    conflicts: overlappingBookings.map((b) => ({
+                        bookingNumber: b.bookingNumber,
+                        checkIn: b.checkIn,
+                        checkOut: b.checkOut,
+                    })),
+                });
+            }
+        }
+
+        if (unavailableRooms.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: `Some room types are not available for the selected dates.`,
+                unavailableRooms,
             });
         }
 
@@ -123,15 +210,15 @@ export const createBooking = async (req, res, next) => {
         const booking = await Booking.create({
             bookingNumber,
             userId: req.user._id,
-            hotelId: hotel.id,
+            hotelId: hotel._id,
             hotelName: hotel.name,
             location: hotel.location,
-            roomType,
-            checkIn: new Date(checkIn),
-            checkOut: new Date(checkOut),
+            roomTypes, // Lưu mảng room types
+            checkIn: checkInDate,
+            checkOut: checkOutDate,
             guests,
             totalPrice,
-            status: "pending",
+            status: "upcoming",
             image: hotel.photos[0] || "",
         });
 
@@ -154,6 +241,17 @@ export const updateBooking = async (req, res, next) => {
     try {
         const { status } = req.body;
 
+        // Validate status
+        const validStatuses = ["upcoming", "completed", "cancelled"];
+        if (status && !validStatuses.includes(status)) {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid status. Must be one of: ${validStatuses.join(
+                    ", "
+                )}`,
+            });
+        }
+
         const booking = await Booking.findById(req.params.id);
 
         if (!booking) {
@@ -168,6 +266,14 @@ export const updateBooking = async (req, res, next) => {
             return res.status(403).json({
                 success: false,
                 message: "Not authorized to update this booking",
+            });
+        }
+
+        // Prevent changing from cancelled
+        if (booking.status === "cancelled") {
+            return res.status(400).json({
+                success: false,
+                message: "Cannot modify a cancelled booking",
             });
         }
 

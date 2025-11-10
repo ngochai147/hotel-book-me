@@ -12,7 +12,6 @@ const coordinatesSchema = new mongoose.Schema(
 
 const reviewSchema = new mongoose.Schema(
     {
-        reviewId: { type: mongoose.Schema.Types.ObjectId, ref: "Review" },
         userId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",

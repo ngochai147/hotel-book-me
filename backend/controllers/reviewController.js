@@ -1,5 +1,6 @@
 import Review from "../models/Review.js";
 import Hotel from "../models/Hotel.js";
+import Booking from "../models/Booking.js";
 
 /**
  * @desc    Get all reviews
@@ -109,12 +110,34 @@ export const createReview = async (req, res, next) => {
             });
         }
 
+        if (rating < 1 || rating > 5) {
+            return res.status(400).json({
+                success: false,
+                message: "Rating must be between 1 and 5",
+            });
+        }
+
         // Check if hotel exists
         const hotel = await Hotel.findById(hotelId);
         if (!hotel) {
             return res.status(404).json({
                 success: false,
                 message: "Hotel not found",
+            });
+        }
+
+        // Check if user has a completed booking at this hotel
+        const completedBooking = await Booking.findOne({
+            userId: req.user._id,
+            hotelId: hotelId,
+            status: "completed",
+        });
+
+        if (!completedBooking) {
+            return res.status(403).json({
+                success: false,
+                message:
+                    "You can only review hotels where you have a completed booking",
             });
         }
 
@@ -139,16 +162,20 @@ export const createReview = async (req, res, next) => {
             comment,
         });
 
-        // Update hotel's reviews array
-        hotel.reviews.push({
-            reviewId: review._id,
+        // Update hotel's reviews array - keep only 5 latest reviews
+        hotel.reviews.unshift({
             userId: req.user._id,
             rating,
             comment,
             date: review.createdAt,
         });
 
-        // Recalculate hotel's average rating
+        // Keep only 5 latest reviews in hotel document
+        if (hotel.reviews.length > 5) {
+            hotel.reviews = hotel.reviews.slice(0, 5);
+        }
+
+        // Recalculate hotel's average rating from all reviews
         const allReviews = await Review.find({ hotelId });
         const avgRating =
             allReviews.reduce((acc, item) => item.rating + acc, 0) /
@@ -164,70 +191,6 @@ export const createReview = async (req, res, next) => {
         res.status(201).json({
             success: true,
             message: "Review created successfully",
-            data: populatedReview,
-        });
-    } catch (error) {
-        next(error);
-    }
-};
-
-/**
- * @desc    Update review
- * @route   PUT /api/reviews/:id
- * @access  Private
- */
-export const updateReview = async (req, res, next) => {
-    try {
-        const { rating, comment } = req.body;
-
-        let review = await Review.findById(req.params.id);
-
-        if (!review) {
-            return res.status(404).json({
-                success: false,
-                message: "Review not found",
-            });
-        }
-
-        // Check if user owns this review
-        if (review.userId.toString() !== req.user._id.toString()) {
-            return res.status(403).json({
-                success: false,
-                message: "Not authorized to update this review",
-            });
-        }
-
-        // Update review
-        review.rating = rating || review.rating;
-        review.comment = comment || review.comment;
-        await review.save();
-
-        // Update hotel's average rating
-        const hotel = await Hotel.findById(review.hotelId);
-        const allReviews = await Review.find({ hotelId: review.hotelId });
-        const avgRating =
-            allReviews.reduce((acc, item) => item.rating + acc, 0) /
-            allReviews.length;
-        hotel.rating = Math.round(avgRating * 10) / 10;
-
-        // Update review in hotel's reviews array
-        const reviewIndex = hotel.reviews.findIndex(
-            (r) => r.reviewId.toString() === review._id.toString()
-        );
-        if (reviewIndex !== -1) {
-            hotel.reviews[reviewIndex].rating = review.rating;
-            hotel.reviews[reviewIndex].comment = review.comment;
-        }
-
-        await hotel.save();
-
-        const populatedReview = await Review.findById(review._id)
-            .populate("userId", "userName avatar")
-            .populate("hotelId", "name location");
-
-        res.json({
-            success: true,
-            message: "Review updated successfully",
             data: populatedReview,
         });
     } catch (error) {
@@ -261,8 +224,16 @@ export const deleteReview = async (req, res, next) => {
 
         // Remove review from hotel's reviews array
         const hotel = await Hotel.findById(review.hotelId);
+
+        // Filter out the deleted review by matching userId and rating
         hotel.reviews = hotel.reviews.filter(
-            (r) => r.reviewId.toString() !== review._id.toString()
+            (r) =>
+                !(
+                    r.userId.toString() === review.userId.toString() &&
+                    r.rating === review.rating &&
+                    Math.abs(new Date(r.date) - new Date(review.createdAt)) <
+                        1000
+                )
         );
 
         // Recalculate hotel's average rating
