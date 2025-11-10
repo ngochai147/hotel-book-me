@@ -137,7 +137,7 @@ export const createReview = async (req, res, next) => {
 
         // Update hotel's reviews array - keep only 5 latest reviews
         hotel.reviews.unshift({
-            userId: req.user._id,
+            userName: req.user.userName,
             rating,
             comment,
             date: review.createdAt,
