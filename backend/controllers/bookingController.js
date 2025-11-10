@@ -186,29 +186,47 @@ export const createBooking = async (req, res, next) => {
         // Only check against "upcoming" bookings (ignore completed and cancelled)
         const unavailableRooms = [];
 
+        // Create end of day for checkout to handle same-day bookings correctly
+        const checkInEndOfDay = new Date(checkInDate);
+        checkInEndOfDay.setHours(23, 59, 59, 999);
+
+        const checkOutEndOfDay = new Date(checkOutDate);
+        checkOutEndOfDay.setHours(23, 59, 59, 999);
+
         for (const roomType of roomTypes) {
-            const overlappingBookings = await Booking.find({
+            // Get all upcoming bookings for this room type
+            const allUpcomingBookings = await Booking.find({
                 hotelId: hotelId,
-                roomTypes: roomType, // Kiểm tra nếu roomType nằm trong mảng roomTypes
-                status: "upcoming", // CHỈ kiểm tra bookings đang upcoming
-                $or: [
-                    {
-                        // Booking starts before or on checkIn and ends after checkIn
-                        checkIn: { $lte: checkInDate },
-                        checkOut: { $gt: checkInDate },
-                    },
-                    {
-                        // Booking starts before checkOut and ends on or after checkOut
-                        checkIn: { $lt: checkOutDate },
-                        checkOut: { $gte: checkOutDate },
-                    },
-                    {
-                        // Booking is completely within the requested dates
-                        checkIn: { $gte: checkInDate },
-                        checkOut: { $lte: checkOutDate },
-                    },
-                ],
+                roomTypes: roomType,
+                status: "upcoming",
             });
+
+            // Filter overlapping bookings by comparing dates only (ignore time)
+            const overlappingBookings = allUpcomingBookings.filter(
+                (booking) => {
+                    // Normalize existing booking dates to start of day for comparison
+                    const existingCheckIn = new Date(booking.checkIn);
+                    existingCheckIn.setHours(0, 0, 0, 0);
+
+                    const existingCheckOut = new Date(booking.checkOut);
+                    existingCheckOut.setHours(0, 0, 0, 0);
+
+                    // Check if dates overlap (comparing only dates, not times)
+                    // Overlap occurs if:
+                    // 1. Existing booking starts on or before new checkIn and ends after new checkIn
+                    // 2. Existing booking starts before new checkOut and ends on or after new checkOut
+                    // 3. Existing booking is completely within new booking dates
+                    const hasOverlap =
+                        (existingCheckIn <= checkInDate &&
+                            existingCheckOut > checkInDate) ||
+                        (existingCheckIn < checkOutDate &&
+                            existingCheckOut >= checkOutDate) ||
+                        (existingCheckIn >= checkInDate &&
+                            existingCheckOut <= checkOutDate);
+
+                    return hasOverlap;
+                }
+            );
 
             if (overlappingBookings.length > 0) {
                 unavailableRooms.push({
