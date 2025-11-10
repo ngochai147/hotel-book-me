@@ -1,61 +1,96 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Calendar, MapPin, Search as SearchIcon, SlidersHorizontal, Star, Users } from 'lucide-react-native';
-import { useState } from 'react';
-import { Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useState, useEffect } from 'react';
+import { Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, ActivityIndicator, Alert } from 'react-native';
 import FilterModal from '../components/FilterModal';
-
-const searchHistory = [
-  { id: 1, text: 'Hotel Bali', tag: true },
-  { id: 2, text: 'Istanbul', tag: true },
-  { id: 3, text: 'Villa Ubuwatu', tag: true },
-  { id: 4, text: 'The Dreamland Bali', tag: false },
-  { id: 5, text: 'Jakarta', tag: false },
-  { id: 6, text: 'New York', tag: false },
-];
-
-const recommendations = [
-  {
-    id: 1,
-    name: 'Terra Cottages Bali',
-    location: 'Bingin, Uluwatu, Bali',
-    rating: 4.7,
-    price: 38,
-    image: 'https://images.pexels.com/photos/1268871/pexels-photo-1268871.jpeg?auto=compress&cs=tinysrgb&w=400',
-  },
-  {
-    id: 2,
-    name: 'Santai by The Koro...',
-    location: 'Bingin, Uluwatu, Bali',
-    rating: 4.8,
-    price: 29,
-    image: 'https://images.pexels.com/photos/271624/pexels-photo-271624.jpeg?auto=compress&cs=tinysrgb&w=400',
-  },
-];
-
-const recentlyViewed = [
-  {
-    id: 1,
-    name: 'Sivana Hotel Boutique',
-    location: 'Uluwatu, Bali',
-    rating: 4.8,
-    price: 50,
-    image: 'https://images.pexels.com/photos/164595/pexels-photo-164595.jpeg?auto=compress&cs=tinysrgb&w=400',
-  },
-  {
-    id: 2,
-    name: 'Bingin High Tides',
-    location: 'Bingin, Uluwatu, Bali',
-    rating: 4.9,
-    price: 48,
-    image: 'https://images.pexels.com/photos/338504/pexels-photo-338504.jpeg?auto=compress&cs=tinysrgb&w=400',
-  },
-];
+import { searchHotelsByLocation, getFilteredHotels, getRecommendedHotels, Hotel } from '../services/hotelService';
+import { getImageUri } from '../utils/imageHelper';
 
 export default function SearchScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const [searchQuery, setSearchQuery] = useState(params.location as string || '');
   const [showFilterModal, setShowFilterModal] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [recommendations, setRecommendations] = useState<Hotel[]>([]);
+  const [searchResults, setSearchResults] = useState<Hotel[]>([]);
+  const [recentlyViewed, setRecentlyViewed] = useState<Hotel[]>([]);
+  const [searchHistory, setSearchHistory] = useState<string[]>([]);
+
+  useEffect(() => {
+    loadInitialData();
+    // Nếu có location từ params thì tự động search
+    if (params.location) {
+      setSearchQuery(params.location as string);
+    }
+  }, []);
+
+  // Auto search khi searchQuery thay đổi
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      performSearch();
+    }, 500); // Debounce 500ms để tránh search quá nhiều
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]);
+
+  const loadInitialData = async () => {
+    try {
+      setLoading(true);
+      
+      // Load tất cả hotels khi vào màn hình
+      const allHotelsResponse = await getRecommendedHotels(100);
+      if (allHotelsResponse.success && allHotelsResponse.data) {
+        setRecommendations(allHotelsResponse.data);
+        setSearchResults(allHotelsResponse.data); // Hiển thị tất cả ban đầu
+      }
+
+      // Load search history from localStorage (if implemented)
+      const history = ['Hotel Bali', 'Istanbul', 'Villa Ubuwatu'];
+      setSearchHistory(history);
+      
+    } catch (error) {
+      console.error('Load initial data error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const performSearch = async (query?: string) => {
+    const searchText = query !== undefined ? query : searchQuery;
+    
+    try {
+      setLoading(true);
+      
+      // Nếu search rỗng, hiển thị tất cả hotels
+      if (!searchText.trim()) {
+        const allHotelsResponse = await getRecommendedHotels(100);
+        if (allHotelsResponse.success && allHotelsResponse.data) {
+          setSearchResults(allHotelsResponse.data);
+        }
+        setLoading(false);
+        return;
+      }
+
+      // Search theo location
+      const response = await searchHotelsByLocation(searchText);
+      
+      if (response.success) {
+        setSearchResults(response.data);
+        // Update search history chỉ khi có text
+        if (searchText.trim() && !searchHistory.includes(searchText)) {
+          setSearchHistory([searchText, ...searchHistory.slice(0, 5)]);
+        }
+      } else {
+        Alert.alert('Error', 'Failed to search hotels');
+      }
+    } catch (error) {
+      console.error('Search error:', error);
+      Alert.alert('Error', 'Failed to search hotels');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const bookingInfo = {
     location: params.location as string,
@@ -66,9 +101,32 @@ export default function SearchScreen() {
     children: params.children as string,
   };
 
-  const handleFilterApply = (filters: any) => {
-    console.log('Applied filters:', filters);
+  const handleFilterApply = async (filters: any) => {
+    try {
+      setLoading(true);
+      setShowFilterModal(false);
+      
+      const response = await getFilteredHotels({
+        location: searchQuery || undefined,
+        priceRange: filters.priceRange,
+        minRating: filters.rating || undefined,
+      });
+      
+      if (response.success) {
+        setSearchResults(response.data);
+      } else {
+        Alert.alert('Error', 'Failed to apply filters');
+      }
+    } catch (error) {
+      console.error('Filter error:', error);
+      Alert.alert('Error', 'Failed to apply filters');
+    } finally {
+      setLoading(false);
+    }
   };
+
+  // Luôn hiển thị searchResults (có thể là tất cả hotels hoặc filtered results)
+  const displayedHotels = searchResults;
 
   return (
     <View style={styles.container}>
@@ -83,8 +141,14 @@ export default function SearchScreen() {
             placeholder="Search hotel or location"
             value={searchQuery}
             onChangeText={setSearchQuery}
+            returnKeyType="search"
             placeholderTextColor="#999"
           />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Text style={{ color: '#999', fontSize: 18, fontWeight: '500' }}>✕</Text>
+            </TouchableOpacity>
+          )}
         </View>
         <TouchableOpacity 
           onPress={() => setShowFilterModal(true)} 
@@ -122,99 +186,104 @@ export default function SearchScreen() {
         </View>
       )}
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Latest Search</Text>
-          <View style={styles.tagsContainer}>
-            {searchHistory.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={[styles.tag, item.tag && styles.tagActive]}
-              >
-                <Text style={[styles.tagText, item.tag && styles.tagTextActive]}>
-                  {item.text}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+      {loading ? (
+        <View style={[styles.content, { justifyContent: 'center', alignItems: 'center' }]}>
+          <ActivityIndicator size="large" color="#17A2B8" />
+          <Text style={{ marginTop: 10, color: '#666' }}>
+            {searchQuery ? 'Searching...' : 'Loading...'}
+          </Text>
         </View>
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recommendations</Text>
-            <TouchableOpacity>
-              <Text style={styles.seeAll}>See all</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.recommendationsGrid}>
-            {recommendations.map((hotel) => (
-              <TouchableOpacity
-                key={hotel.id}
-                style={styles.recommendationCard}
-                onPress={() => router.push(`/hotel/${hotel.id}`)}
-              >
-                <Image source={{ uri: hotel.image }} style={styles.recommendationImage} />
-                <View style={styles.recommendationInfo}>
-                  <Text style={styles.recommendationName} numberOfLines={1}>
-                    {hotel.name}
-                  </Text>
-                  <View style={styles.hotelMeta}>
-                    <MapPin size={12} color="#666" />
-                    <Text style={styles.hotelLocation} numberOfLines={1}>
-                      {hotel.location}
-                    </Text>
-                  </View>
-                  <View style={styles.hotelFooter}>
-                    <View style={styles.rating}>
-                      <Star size={12} color="#FFA500" fill="#FFA500" />
-                      <Text style={styles.ratingText}>{hotel.rating}</Text>
-                    </View>
-                    <Text style={styles.price}>
-                      ${hotel.price}
-                      <Text style={styles.priceUnit}>/night</Text>
-                    </Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Recently Viewed</Text>
-          {recentlyViewed.map((hotel) => (
-            <TouchableOpacity
-              key={hotel.id}
-              style={styles.recentCard}
-              onPress={() => router.push(`/hotel/${hotel.id}`)}
-            >
-              <Image source={{ uri: hotel.image }} style={styles.recentImage} />
-              <View style={styles.recentInfo}>
-                <Text style={styles.recentName} numberOfLines={1}>
-                  {hotel.name}
-                </Text>
-                <View style={styles.hotelMeta}>
-                  <MapPin size={12} color="#666" />
-                  <Text style={styles.hotelLocation} numberOfLines={1}>
-                    {hotel.location}
-                  </Text>
-                </View>
-                <View style={styles.hotelFooter}>
-                  <View style={styles.rating}>
-                    <Star size={12} color="#FFA500" fill="#FFA500" />
-                    <Text style={styles.ratingText}>{hotel.rating}</Text>
-                  </View>
-                  <Text style={styles.price}>
-                    ${hotel.price}
-                    <Text style={styles.priceUnit}>/night</Text>
-                  </Text>
-                </View>
+      ) : (
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          {/* Search History */}
+          {!searchQuery && searchHistory.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Latest Search</Text>
+              <View style={styles.tagsContainer}>
+                {searchHistory.map((item, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.tag}
+                    onPress={() => setSearchQuery(item)}
+                  >
+                    <Text style={styles.tagText}>{item}</Text>
+                  </TouchableOpacity>
+                ))}
               </View>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </ScrollView>
+            </View>
+          )}
+
+          {/* Search Results */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>
+                {searchQuery && searchResults.length > 0 
+                  ? `${searchResults.length} Results for "${searchQuery}"` 
+                  : searchQuery 
+                  ? 'Search Results'
+                  : `All Hotels (${searchResults.length})`}
+              </Text>
+            </View>
+
+            {displayedHotels.length === 0 ? (
+              <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                <Text style={styles.noResults}>
+                  {searchQuery ? 'No hotels found for your search' : 'No hotels available'}
+                </Text>
+                {searchQuery && (
+                  <Text style={{ fontSize: 13, color: '#999', marginTop: 8 }}>
+                    Try searching with different keywords
+                  </Text>
+                )}
+              </View>
+            ) : (
+              <View>
+                {displayedHotels.map((hotel) => {
+                  const minPrice = hotel.roomTypes && hotel.roomTypes.length > 0
+                    ? Math.min(...hotel.roomTypes.map(r => r.price))
+                    : 0;
+
+                  return (
+                    <TouchableOpacity
+                      key={hotel._id}
+                      style={styles.hotelCard}
+                      onPress={() => router.push(`/hotel/${hotel._id}`)}
+                    >
+                      <Image 
+                        source={{ uri: getImageUri(hotel.photos?.[0] || '') }} 
+                        style={styles.hotelCardImage} 
+                      />
+                      <View style={styles.hotelCardInfo}>
+                        <Text style={styles.hotelCardName} numberOfLines={1}>
+                          {hotel.name}
+                        </Text>
+                        <View style={styles.hotelMeta}>
+                          <MapPin size={12} color="#666" />
+                          <Text style={styles.hotelLocation} numberOfLines={1}>
+                            {hotel.location}
+                          </Text>
+                        </View>
+                        <View style={styles.hotelFooter}>
+                          <View style={styles.rating}>
+                            <Star size={12} color="#FFA500" fill="#FFA500" />
+                            <Text style={styles.ratingText}>{hotel.rating?.toFixed(1) || '0.0'}</Text>
+                          </View>
+                          {minPrice > 0 && (
+                            <Text style={styles.price}>
+                              ${minPrice}
+                              <Text style={styles.priceUnit}>/night</Text>
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+        </ScrollView>
+      )}
 
       <FilterModal
         visible={showFilterModal}
@@ -431,5 +500,38 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
     color: '#1a1a1a',
+  },
+  hotelCard: {
+    flexDirection: 'row',
+    backgroundColor: 'white',
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  hotelCardImage: {
+    width: 120,
+    height: 120,
+  },
+  hotelCardInfo: {
+    flex: 1,
+    padding: 12,
+    justifyContent: 'space-between',
+  },
+  hotelCardName: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+    marginBottom: 4,
+  },
+  noResults: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+    marginVertical: 20,
   },
 });

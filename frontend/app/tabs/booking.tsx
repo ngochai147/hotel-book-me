@@ -1,71 +1,53 @@
 import { useRouter } from 'expo-router';
 import { Calendar, MapPin, Users } from 'lucide-react-native';
-import { useState } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useState, useEffect } from 'react';
+import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { getMyBookings, cancelBooking, Booking as BookingType } from '../../services/bookingService';
+import { auth } from '../../config/firebase';
+import { getImageUri } from '../../utils/imageHelper';
 
 type BookingStatus = 'upcoming' | 'completed' | 'cancelled';
-
-type Booking = {
-  id: number;
-  hotelName: string;
-  location: string;
-  image: string;
-  checkIn: string;
-  checkOut: string;
-  guests: string;
-  totalPrice: number;
-  status: BookingStatus;
-  nights: number;
-  rating?: number;
-};
 
 export default function BookingScreen() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<BookingStatus>('upcoming');
+  const [bookings, setBookings] = useState<BookingType[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const bookings: Booking[] = [
-    {
-      id: 1,
-      hotelName: 'Hyatt Regency Bali',
-      location: 'Seminyak, Bali',
-      image: 'https://images.pexels.com/photos/164595/pexels-photo-164595.jpeg?auto=compress&cs=tinysrgb&w=400',
-      checkIn: 'Mon, 16 Sep',
-      checkOut: 'Thu, 18 Sep',
-      guests: '2 Guests',
-      totalPrice: 1458.86,
-      status: 'upcoming',
-      nights: 2,
-    },
-    {
-      id: 2,
-      hotelName: 'Tanish by The Fountain',
-      location: 'Seminyak, Bali',
-      image: 'https://images.pexels.com/photos/271624/pexels-photo-271624.jpeg?auto=compress&cs=tinysrgb&w=400',
-      checkIn: 'Sun, 21 Sep',
-      checkOut: 'Thu, 24 Sep',
-      guests: '2 Guests',
-      totalPrice: 1244.71,
-      status: 'upcoming',
-      nights: 3,
-    },
-    {
-      id: 3,
-      hotelName: 'SIMBO by Agung Bali',
-      location: 'Braga, Ubud Bali',
-      image: 'https://images.pexels.com/photos/258154/pexels-photo-258154.jpeg?auto=compress&cs=tinysrgb&w=400',
-      checkIn: 'Fri, 12 Aug',
-      checkOut: 'Sun, 14 Aug',
-      guests: '2 Guests',
-      totalPrice: 1194.75,
-      status: 'completed',
-      nights: 2,
-      rating: 4.7,
-    },
-  ];
+  useEffect(() => {
+    loadBookings();
+  }, [activeTab]);
 
-  const filteredBookings = bookings.filter(b => b.status === activeTab);
+  const loadBookings = async () => {
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        Alert.alert('Login Required', 'Please login to view bookings');
+        router.replace('/auth/login');
+        return;
+      }
 
-  const handleCancelBooking = (id: number, hotelName: string) => {
+      const token = await currentUser.getIdToken();
+      const response = await getMyBookings(token, activeTab);
+      
+      if (response.success) {
+        setBookings(response.data);
+      } else {
+        Alert.alert('Error', 'Failed to load bookings');
+      }
+    } catch (error) {
+      console.error('Load bookings error:', error);
+      Alert.alert('Error', 'Failed to load bookings');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const filteredBookings = bookings;
+
+  const handleCancelBooking = async (bookingId: string, hotelName: string) => {
     Alert.alert(
       'Cancel Booking',
       `Are you sure you want to cancel your booking at ${hotelName}?`,
@@ -74,22 +56,81 @@ export default function BookingScreen() {
         {
           text: 'Yes, Cancel',
           style: 'destructive',
-          onPress: () => {
-            Alert.alert('Booking Cancelled', 'Your booking has been cancelled successfully.');
+          onPress: async () => {
+            try {
+              const currentUser = auth.currentUser;
+              if (!currentUser) return;
+
+              const token = await currentUser.getIdToken();
+              const response = await cancelBooking(token, bookingId);
+              
+              if (response.success) {
+                Alert.alert('Success', 'Your booking has been cancelled successfully.');
+                loadBookings(); // Reload bookings
+              } else {
+                Alert.alert('Error', response.message || 'Failed to cancel booking');
+              }
+            } catch (error) {
+              console.error('Cancel booking error:', error);
+              Alert.alert('Error', 'Failed to cancel booking');
+            }
           }
         }
       ]
     );
   };
 
-  const handleRebook = (booking: Booking) => {
-    router.push(`/hotel/${booking.id}`);
+  const handleRebook = (booking: BookingType) => {
+    try {
+      const hotelId = typeof booking.hotelId === 'string' ? booking.hotelId : booking.hotelId?._id;
+      if (!hotelId) {
+        Alert.alert('Error', 'Hotel information not available');
+        return;
+      }
+      router.push(`/hotel/${hotelId}`);
+    } catch (error) {
+      console.error('Rebook error:', error);
+      Alert.alert('Error', 'Unable to view hotel details');
+    }
   };
 
-  const handleAddReview = (booking: Booking) => {
-    const url = `/review/${booking.id}?hotelName=${encodeURIComponent(booking.hotelName)}&hotelLocation=${encodeURIComponent(booking.location)}&hotelImage=${encodeURIComponent(booking.image)}`;
-    router.push(url as any);
+  const handleAddReview = (booking: BookingType) => {
+    try {
+      const hotel = typeof booking.hotelId === 'object' ? booking.hotelId : null;
+      if (!hotel) {
+        Alert.alert('Error', 'Hotel information not available');
+        return;
+      }
+      const imageUrl = hotel.photos?.[0] ? getImageUri(hotel.photos[0]) : '';
+      const url = `/review/${hotel._id}?hotelName=${encodeURIComponent(hotel.name)}&hotelLocation=${encodeURIComponent(hotel.location)}&hotelImage=${encodeURIComponent(imageUrl)}`;
+      router.push(url as any);
+    } catch (error) {
+      console.error('Add review error:', error);
+      Alert.alert('Error', 'Unable to add review');
+    }
   };
+
+  const formatDate = (date: Date | string) => {
+    const d = new Date(date);
+    return d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' });
+  };
+
+  const calculateNights = (checkIn: Date | string, checkOut: Date | string) => {
+    const start = new Date(checkIn);
+    const end = new Date(checkOut);
+    const diffTime = Math.abs(end.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#17A2B8" />
+        <Text style={{ marginTop: 10, color: '#666' }}>Loading bookings...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -134,100 +175,119 @@ export default function BookingScreen() {
             </Text>
           </View>
         ) : (
-          filteredBookings.map((booking) => (
-            <View key={booking.id} style={styles.bookingCard}>
-              <View style={styles.cardHeader}>
-                <Image source={{ uri: booking.image }} style={styles.hotelImage} />
-                <View style={styles.hotelInfo}>
-                  <Text style={styles.hotelName}>{booking.hotelName}</Text>
-                  <View style={styles.locationRow}>
-                    <MapPin size={12} color="#666" />
-                    <Text style={styles.location}>{booking.location}</Text>
+          filteredBookings.map((booking) => {
+            const hotel = typeof booking.hotelId === 'object' ? booking.hotelId : null;
+            const hotelName = hotel?.name || booking.hotelName || 'Unknown Hotel';
+            const hotelLocation = hotel?.location || booking.location || '';
+            const hotelImagePath = hotel?.photos?.[0] || booking.image;
+            const hotelRating = hotel?.rating;
+            const nights = calculateNights(booking.checkIn, booking.checkOut);
+
+            return (
+              <View key={booking._id} style={styles.bookingCard}>
+                <View style={styles.cardHeader}>
+                  <Image source={{ uri: getImageUri(hotelImagePath) }} style={styles.hotelImage} />
+                  <View style={styles.hotelInfo}>
+                    <Text style={styles.hotelName}>{hotelName}</Text>
+                    <View style={styles.locationRow}>
+                      <MapPin size={12} color="#666" />
+                      <Text style={styles.location}>{hotelLocation}</Text>
+                    </View>
+                    {hotelRating && (
+                      <View style={styles.ratingBadge}>
+                        <Text style={styles.ratingText}>⭐ {hotelRating.toFixed(1)}</Text>
+                      </View>
+                    )}
                   </View>
-                  {booking.rating && (
-                    <View style={styles.ratingBadge}>
-                      <Text style={styles.ratingText}>⭐ {booking.rating}</Text>
+                </View>
+
+                <View style={styles.divider} />
+
+                <View style={styles.bookingDetails}>
+                  <View style={styles.detailRow}>
+                    <View style={styles.detailItem}>
+                      <Calendar size={16} color="#17A2B8" />
+                      <View>
+                        <Text style={styles.detailLabel}>Check-in</Text>
+                        <Text style={styles.detailValue}>{formatDate(booking.checkIn)}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.detailItem}>
+                      <Calendar size={16} color="#17A2B8" />
+                      <View>
+                        <Text style={styles.detailLabel}>Check-out</Text>
+                        <Text style={styles.detailValue}>{formatDate(booking.checkOut)}</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={styles.detailRow}>
+                    <View style={styles.detailItem}>
+                      <Users size={16} color="#17A2B8" />
+                      <View>
+                        <Text style={styles.detailLabel}>Guests</Text>
+                        <Text style={styles.detailValue}>{booking.guests} Guests</Text>
+                      </View>
+                    </View>
+                    <View style={styles.priceContainer}>
+                      <Text style={styles.totalLabel}>Total ({nights} {nights === 1 ? 'night' : 'nights'})</Text>
+                      <Text style={styles.totalPrice}>${booking.totalPrice.toFixed(2)}</Text>
+                    </View>
+                  </View>
+
+                  {booking.roomType && booking.roomType.length > 0 && (
+                    <View style={styles.roomTypeContainer}>
+                      <Text style={styles.roomTypeLabel}>Room Type:</Text>
+                      <Text style={styles.roomTypeText}>{booking.roomType.join(', ')}</Text>
                     </View>
                   )}
                 </View>
-              </View>
 
-              <View style={styles.divider} />
-
-              <View style={styles.bookingDetails}>
-                <View style={styles.detailRow}>
-                  <View style={styles.detailItem}>
-                    <Calendar size={16} color="#17A2B8" />
-                    <View>
-                      <Text style={styles.detailLabel}>Check-in</Text>
-                      <Text style={styles.detailValue}>{booking.checkIn}</Text>
-                    </View>
-                  </View>
-                  <View style={styles.detailItem}>
-                    <Calendar size={16} color="#17A2B8" />
-                    <View>
-                      <Text style={styles.detailLabel}>Check-out</Text>
-                      <Text style={styles.detailValue}>{booking.checkOut}</Text>
-                    </View>
-                  </View>
-                </View>
-
-                <View style={styles.detailRow}>
-                  <View style={styles.detailItem}>
-                    <Users size={16} color="#17A2B8" />
-                    <View>
-                      <Text style={styles.detailLabel}>Guests</Text>
-                      <Text style={styles.detailValue}>{booking.guests}</Text>
-                    </View>
-                  </View>
-                  <View style={styles.priceContainer}>
-                    <Text style={styles.totalLabel}>Total</Text>
-                    <Text style={styles.totalPrice}>${booking.totalPrice}</Text>
-                  </View>
-                </View>
-              </View>
-
-              <View style={styles.cardFooter}>
-                {activeTab === 'upcoming' && (
-                  <>
-                    <TouchableOpacity
-                      style={styles.cancelButton}
-                      onPress={() => handleCancelBooking(booking.id, booking.hotelName)}
-                    >
-                      <Text style={styles.cancelButtonText}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.rebookButton}>
-                      <Text style={styles.rebookButtonText}>Re-Book</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-                {activeTab === 'completed' && (
-                  <>
-                    <TouchableOpacity
-                      style={styles.cancelButton}
-                      onPress={() => handleRebook(booking)}
-                    >
-                      <Text style={styles.cancelButtonText}>Re-Book</Text>
-                    </TouchableOpacity>
+                <View style={styles.cardFooter}>
+                  {activeTab === 'upcoming' && (
+                    <>
+                      <TouchableOpacity
+                        style={styles.cancelButton}
+                        onPress={() => handleCancelBooking(booking._id, hotelName)}
+                      >
+                        <Text style={styles.cancelButtonText}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={styles.rebookButton}
+                        onPress={() => handleRebook(booking)}
+                      >
+                        <Text style={styles.rebookButtonText}>View Details</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
+                  {activeTab === 'completed' && (
+                    <>
+                      <TouchableOpacity
+                        style={styles.cancelButton}
+                        onPress={() => handleRebook(booking)}
+                      >
+                        <Text style={styles.cancelButtonText}>Re-Book</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.rebookButton}
+                        onPress={() => handleAddReview(booking)}
+                      >
+                        <Text style={styles.rebookButtonText}>Add Review</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
+                  {activeTab === 'cancelled' && (
                     <TouchableOpacity
                       style={styles.rebookButton}
-                      onPress={() => handleAddReview(booking)}
+                      onPress={() => handleRebook(booking)}
                     >
-                      <Text style={styles.rebookButtonText}>Add Review</Text>
+                      <Text style={styles.rebookButtonText}>Re-Book</Text>
                     </TouchableOpacity>
-                  </>
-                )}
-                {activeTab === 'cancelled' && (
-                  <TouchableOpacity
-                    style={styles.rebookButton}
-                    onPress={() => handleRebook(booking)}
-                  >
-                    <Text style={styles.rebookButtonText}>Re-Book</Text>
-                  </TouchableOpacity>
-                )}
+                  )}
+                </View>
               </View>
-            </View>
-          ))
+            );
+          })
         )}
       </ScrollView>
     </View>
@@ -394,6 +454,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#17A2B8',
+  },
+  roomTypeContainer: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  roomTypeLabel: {
+    fontSize: 11,
+    color: '#999',
+    marginBottom: 4,
+  },
+  roomTypeText: {
+    fontSize: 12,
+    color: '#1a1a1a',
+    fontWeight: '500',
   },
   cardFooter: {
     flexDirection: 'row',
