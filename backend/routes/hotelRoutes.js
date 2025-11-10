@@ -2,9 +2,6 @@ import express from "express";
 import {
     getAllHotels,
     getHotelById,
-    createHotel,
-    updateHotel,
-    deleteHotel,
     searchHotelsByLocation,
     getHotelReviews,
 } from "../controllers/hotelController.js";
