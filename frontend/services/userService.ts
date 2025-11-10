@@ -70,26 +70,45 @@ export const updateUser = async (
 
 /**
  * Get user favorites
+ * GET /api/users/:id/favorites
  */
-export const getUserFavorites = async (userId: string, token?: string) => {
+export const getUserFavorites = async (userId: string, token: string) => {
   try {
-    const headers: any = {
-      'Content-Type': 'application/json',
-    };
-
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
     const response = await fetch(`${API_BASE_URL}/users/${userId}/favorites`, {
       method: 'GET',
-      headers,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
     });
 
     const result = await response.json();
     return result;
   } catch (error) {
     console.error('Get favorites error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Toggle hotel favorite status (add or remove)
+ * If hotel is in favorites, it will be removed; if not, it will be added
+ */
+export const toggleFavorite = async (userId: string, hotelId: string, token: string, isCurrentlyFavorite: boolean) => {
+  try {
+    const method = isCurrentlyFavorite ? 'DELETE' : 'POST';
+    const response = await fetch(`${API_BASE_URL}/users/${userId}/favorites/${hotelId}`, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    console.error('Toggle favorite error:', error);
     throw error;
   }
 };

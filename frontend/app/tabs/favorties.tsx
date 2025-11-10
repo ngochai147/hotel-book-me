@@ -1,73 +1,20 @@
 import { useRouter } from 'expo-router';
 import { Filter, Heart, MapPin, Star, X } from 'lucide-react-native';
-import { useState } from 'react';
-import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-
-type Hotel = {
-  id: number;
-  name: string;
-  location: string;
-  rating: number;
-  price: number;
-  image: string;
-};
+import { useState, useEffect } from 'react';
+import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { getUserFavorites, toggleFavorite } from '../../services/userService';
+import { getMe } from '../../services/authService';
+import { auth } from '../../config/firebase';
+import { Hotel } from '../../services/hotelService';
+import { getImageUri } from '../../utils/imageHelper';
 
 type SortType = 'Resort Location' | 'Price' | 'Rating';
 
-const initialFavorites: Hotel[] = [
-  {
-    id: 1,
-    name: 'Grand Bull',
-    location: 'Bingin, Bali',
-    rating: 4.9,
-    price: 28,
-    image: 'https://images.pexels.com/photos/164595/pexels-photo-164595.jpeg?auto=compress&cs=tinysrgb&w=400',
-  },
-  {
-    id: 2,
-    name: 'Ocean Hotel',
-    location: 'Ubud, Bali',
-    rating: 4.8,
-    price: 35,
-    image: 'https://images.pexels.com/photos/271624/pexels-photo-271624.jpeg?auto=compress&cs=tinysrgb&w=400',
-  },
-  {
-    id: 3,
-    name: 'Luxury Resort',
-    location: 'Seminyak, Bali',
-    rating: 4.9,
-    price: 42,
-    image: 'https://images.pexels.com/photos/261102/pexels-photo-261102.jpeg?auto=compress&cs=tinysrgb&w=400',
-  },
-  {
-    id: 4,
-    name: 'Vista Paradis',
-    location: 'Nusa Dua, Bali',
-    rating: 4.7,
-    price: 38,
-    image: 'https://images.pexels.com/photos/271639/pexels-photo-271639.jpeg?auto=compress&cs=tinysrgb&w=400',
-  },
-  {
-    id: 5,
-    name: 'New Zealand',
-    location: 'Auckland',
-    rating: 4.8,
-    price: 45,
-    image: 'https://images.pexels.com/photos/261169/pexels-photo-261169.jpeg?auto=compress&cs=tinysrgb&w=400',
-  },
-  {
-    id: 6,
-    name: 'Grand in Dubai',
-    location: 'Dubai, UAE',
-    rating: 4.9,
-    price: 88,
-    image: 'https://images.pexels.com/photos/53577/hotel-architectural-tourism-travel-53577.jpeg?auto=compress&cs=tinysrgb&w=400',
-  },
-];
-
 export default function FavoritesScreen() {
   const router = useRouter();
-  const [favorites, setFavorites] = useState<Hotel[]>(initialFavorites);
+  const [favorites, setFavorites] = useState<Hotel[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
   const [selectedFilter, setSelectedFilter] = useState<SortType>('Resort Location');
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [tempFilters, setTempFilters] = useState({
@@ -76,21 +23,73 @@ export default function FavoritesScreen() {
     locations: [] as string[],
   });
 
+  useEffect(() => {
+    loadUserAndFavorites();
+  }, []);
+
+  const loadUserAndFavorites = async () => {
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        Alert.alert('Login Required', 'Please login to view favorites');
+        router.replace('/auth/login');
+        return;
+      }
+
+      const token = await currentUser.getIdToken();
+      
+      // Get user ID from /api/auth/me
+      const meResponse = await getMe(token);
+      if (meResponse.success && meResponse.data) {
+        const uid = meResponse.data._id;
+        setUserId(uid);
+        
+        // Load favorites
+        await loadFavorites(uid, token);
+      }
+    } catch (error) {
+      console.error('Load user error:', error);
+      Alert.alert('Error', 'Failed to load user data');
+    }
+  };
+
+  const loadFavorites = async (uid: string, token: string) => {
+    try {
+      setLoading(true);
+      const response = await getUserFavorites(uid, token);
+      
+      if (response.success) {
+        setFavorites(response.data || []);
+      } else {
+        Alert.alert('Error', 'Failed to load favorites');
+      }
+    } catch (error) {
+      console.error('Load favorites error:', error);
+      Alert.alert('Error', 'Failed to load favorites');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const getSortedFavorites = () => {
     const sorted = [...favorites];
     
     switch (selectedFilter) {
       case 'Price':
-        return sorted.sort((a, b) => a.price - b.price);
+        return sorted.sort((a, b) => {
+          const priceA = a.roomTypes && a.roomTypes.length > 0 ? Math.min(...a.roomTypes.map(r => r.price)) : 0;
+          const priceB = b.roomTypes && b.roomTypes.length > 0 ? Math.min(...b.roomTypes.map(r => r.price)) : 0;
+          return priceA - priceB;
+        });
       case 'Rating':
-        return sorted.sort((a, b) => b.rating - a.rating);
+        return sorted.sort((a, b) => (b.rating || 0) - (a.rating || 0));
       case 'Resort Location':
       default:
         return sorted.sort((a, b) => a.location.localeCompare(b.location));
     }
   };
 
-  const handleRemoveFavorite = (hotelId: number, hotelName: string) => {
+  const handleRemoveFavorite = async (hotelId: string, hotelName: string) => {
     Alert.alert(
       'Remove from Favourites',
       `Remove "${hotelName}" from your favourites?`,
@@ -99,8 +98,24 @@ export default function FavoritesScreen() {
         {
           text: 'Remove',
           style: 'destructive',
-          onPress: () => {
-            setFavorites(favorites.filter(h => h.id !== hotelId));
+          onPress: async () => {
+            try {
+              const currentUser = auth.currentUser;
+              if (!currentUser || !userId) return;
+
+              const token = await currentUser.getIdToken();
+              const response = await toggleFavorite(userId, hotelId, token, true);
+              
+              if (response.success) {
+                // Update local state
+                setFavorites(response.data || []);
+              } else {
+                Alert.alert('Error', 'Failed to remove from favorites');
+              }
+            } catch (error) {
+              console.error('Remove favorite error:', error);
+              Alert.alert('Error', 'Failed to remove from favorites');
+            }
           },
         },
       ]
@@ -121,6 +136,15 @@ export default function FavoritesScreen() {
   };
 
   const sortedFavorites = getSortedFavorites();
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#17A2B8" />
+        <Text style={{ marginTop: 10, color: '#666' }}>Loading favorites...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -179,35 +203,43 @@ export default function FavoritesScreen() {
           </View>
         ) : (
           <View style={styles.grid}>
-            {sortedFavorites.map((hotel) => (
-              <TouchableOpacity 
-                key={hotel.id} 
-                style={styles.card}
-                onPress={() => router.push(`/hotel/${hotel.id}` as any)}
-              >
-                <Image source={{ uri: hotel.image }} style={styles.image} />
+            {sortedFavorites.map((hotel) => {
+              const minPrice = hotel.roomTypes && hotel.roomTypes.length > 0
+                ? Math.min(...hotel.roomTypes.map(r => r.price))
+                : 0;
+
+              return (
                 <TouchableOpacity 
-                  style={styles.favoriteButton}
-                  onPress={() => handleRemoveFavorite(hotel.id, hotel.name)}
+                  key={hotel._id} 
+                  style={styles.card}
+                  onPress={() => router.push(`/hotel/${hotel._id}` as any)}
                 >
-                  <Heart size={18} color="#FF6B6B" fill="#FF6B6B" />
-                </TouchableOpacity>
-                <View style={styles.info}>
-                  <Text style={styles.name} numberOfLines={1}>{hotel.name}</Text>
-                  <View style={styles.meta}>
-                    <MapPin size={12} color="#666" />
-                    <Text style={styles.location} numberOfLines={1}>{hotel.location}</Text>
-                  </View>
-                  <View style={styles.footer}>
-                    <View style={styles.rating}>
-                      <Star size={12} color="#FFA500" fill="#FFA500" />
-                      <Text style={styles.ratingText}>{hotel.rating}</Text>
+                  <Image source={{ uri: getImageUri(hotel.photos?.[0]) }} style={styles.image} />
+                  <TouchableOpacity 
+                    style={styles.favoriteButton}
+                    onPress={() => handleRemoveFavorite(hotel._id, hotel.name)}
+                  >
+                    <Heart size={18} color="#FF6B6B" fill="#FF6B6B" />
+                  </TouchableOpacity>
+                  <View style={styles.info}>
+                    <Text style={styles.name} numberOfLines={1}>{hotel.name}</Text>
+                    <View style={styles.meta}>
+                      <MapPin size={12} color="#666" />
+                      <Text style={styles.location} numberOfLines={1}>{hotel.location}</Text>
                     </View>
-                    <Text style={styles.price}>${hotel.price}<Text style={styles.priceUnit}>/night</Text></Text>
+                    <View style={styles.footer}>
+                      <View style={styles.rating}>
+                        <Star size={12} color="#FFA500" fill="#FFA500" />
+                        <Text style={styles.ratingText}>{hotel.rating?.toFixed(1) || '0.0'}</Text>
+                      </View>
+                      {minPrice > 0 && (
+                        <Text style={styles.price}>${minPrice}<Text style={styles.priceUnit}>/night</Text></Text>
+                      )}
+                    </View>
                   </View>
-                </View>
-              </TouchableOpacity>
-            ))}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         )}
       </ScrollView>
