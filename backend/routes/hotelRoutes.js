@@ -3,7 +3,6 @@ import {
     getAllHotels,
     getHotelById,
     searchHotelsByLocation,
-    getHotelReviews,
 } from "../controllers/hotelController.js";
 import { verifyToken } from "../middlewares/verifyToken.js";
 
@@ -13,6 +12,6 @@ const router = express.Router();
 router.get("/", getAllHotels);
 router.get("/search/:location", searchHotelsByLocation);
 router.get("/:id", getHotelById);
-router.get("/:id/reviews", getHotelReviews);
+
 
 export default router;
