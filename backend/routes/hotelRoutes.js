@@ -18,9 +18,4 @@ router.get("/search/:location", searchHotelsByLocation);
 router.get("/:id", getHotelById);
 router.get("/:id/reviews", getHotelReviews);
 
-// Protected routes (Admin only - you can add admin middleware)
-router.post("/", verifyToken, createHotel);
-router.put("/:id", verifyToken, updateHotel);
-router.delete("/:id", verifyToken, deleteHotel);
-
 export default router;
