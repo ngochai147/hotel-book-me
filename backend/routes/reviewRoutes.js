@@ -2,7 +2,7 @@ import express from "express";
 import {
     getAllReviews,
     getReviewsByHotel,
-    getReviewById,
+    getReviewsByUser,
     createReview,
     deleteReview,
 } from "../controllers/reviewController.js";
@@ -13,7 +13,8 @@ const router = express.Router();
 // Public routes
 router.get("/", getAllReviews);
 router.get("/hotel/:hotelId", getReviewsByHotel);
-router.get("/:id", getReviewById);
+router.get("/user/:userId", getReviewsByUser);
+
 
 // Protected routes
 router.post("/", verifyToken, createReview);
