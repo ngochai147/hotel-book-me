@@ -35,8 +35,4 @@ dist/
 build/
 
 #md
-SETUP_COMPLETE.md
-VISUAL_GUIDE.md
-ARCHITECTURE.md
-DEPLOYMENT_GUIDE.md
-README.md
+markdown/

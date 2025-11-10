@@ -2,11 +2,7 @@ import express from "express";
 import {
     getAllHotels,
     getHotelById,
-    createHotel,
-    updateHotel,
-    deleteHotel,
     searchHotelsByLocation,
-    getHotelReviews,
 } from "../controllers/hotelController.js";
 import { verifyToken } from "../middlewares/verifyToken.js";
 
@@ -16,11 +12,6 @@ const router = express.Router();
 router.get("/", getAllHotels);
 router.get("/search/:location", searchHotelsByLocation);
 router.get("/:id", getHotelById);
-router.get("/:id/reviews", getHotelReviews);
 
-// Protected routes (Admin only - you can add admin middleware)
-router.post("/", verifyToken, createHotel);
-router.put("/:id", verifyToken, updateHotel);
-router.delete("/:id", verifyToken, deleteHotel);
 
 export default router;

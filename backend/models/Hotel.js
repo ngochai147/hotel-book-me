@@ -12,11 +12,7 @@ const coordinatesSchema = new mongoose.Schema(
 
 const reviewSchema = new mongoose.Schema(
     {
-        reviewId: { type: mongoose.Schema.Types.ObjectId, ref: "Review" },
-        userId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "User",
-        },
+        userName: String,
         rating: Number,
         comment: String,
         date: { type: Date, default: Date.now },
@@ -50,8 +46,8 @@ const hotelSchema = new mongoose.Schema({
     rating: Number,
     description: String,
     amenities: [String],
-    checkInTime: Date,
-    checkOutTime: Date,
+    checkInTime: String,
+    checkOutTime: String,
     policies: [String],
     photos: [String],
     coordinates: coordinatesSchema,

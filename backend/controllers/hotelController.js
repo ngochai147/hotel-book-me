@@ -86,79 +86,6 @@ export const getHotelById = async (req, res, next) => {
 };
 
 /**
- * @desc    Create new hotel
- * @route   POST /api/hotels
- * @access  Private (Admin only)
- */
-export const createHotel = async (req, res, next) => {
-    try {
-        const hotel = await Hotel.create(req.body);
-
-        res.status(201).json({
-            success: true,
-            message: "Hotel created successfully",
-            data: hotel,
-        });
-    } catch (error) {
-        next(error);
-    }
-};
-
-/**
- * @desc    Update hotel
- * @route   PUT /api/hotels/:id
- * @access  Private (Admin only)
- */
-export const updateHotel = async (req, res, next) => {
-    try {
-        const hotel = await Hotel.findByIdAndUpdate(req.params.id, req.body, {
-            new: true,
-            runValidators: true,
-        });
-
-        if (!hotel) {
-            return res.status(404).json({
-                success: false,
-                message: "Hotel not found",
-            });
-        }
-
-        res.json({
-            success: true,
-            message: "Hotel updated successfully",
-            data: hotel,
-        });
-    } catch (error) {
-        next(error);
-    }
-};
-
-/**
- * @desc    Delete hotel
- * @route   DELETE /api/hotels/:id
- * @access  Private (Admin only)
- */
-export const deleteHotel = async (req, res, next) => {
-    try {
-        const hotel = await Hotel.findByIdAndDelete(req.params.id);
-
-        if (!hotel) {
-            return res.status(404).json({
-                success: false,
-                message: "Hotel not found",
-            });
-        }
-
-        res.json({
-            success: true,
-            message: "Hotel deleted successfully",
-        });
-    } catch (error) {
-        next(error);
-    }
-};
-
-/**
  * @desc    Search hotels by location
  * @route   GET /api/hotels/search/:location
  * @access  Public
@@ -179,34 +106,6 @@ export const searchHotelsByLocation = async (req, res, next) => {
             success: true,
             count: hotels.length,
             data: hotels,
-        });
-    } catch (error) {
-        next(error);
-    }
-};
-
-/**
- * @desc    Get hotel reviews
- * @route   GET /api/hotels/:id/reviews
- * @access  Public
- */
-export const getHotelReviews = async (req, res, next) => {
-    try {
-        const hotel = await Hotel.findById(req.params.id)
-            .populate("reviews.userId", "userName avatar")
-            .select("reviews");
-
-        if (!hotel) {
-            return res.status(404).json({
-                success: false,
-                message: "Hotel not found",
-            });
-        }
-
-        res.json({
-            success: true,
-            count: hotel.reviews.length,
-            data: hotel.reviews,
         });
     } catch (error) {
         next(error);
