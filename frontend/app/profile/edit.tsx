@@ -1,21 +1,173 @@
 import { useRouter } from 'expo-router';
 import { Calendar, Camera, ChevronLeft, Mail, MapPin, Phone, User } from 'lucide-react-native';
-import { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useState, useEffect } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, ActivityIndicator, Image } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { auth } from '../../config/firebase';
+import { updateUser } from '../../services/userService';
+import { getMe } from '../../services/authService';
 
 export default function EditProfileScreen() {
   const router = useRouter();
-  const [name, setName] = useState('Hasan Abdul');
-  const [email, setEmail] = useState('hasanabdulgaffar@gmail.com');
-  const [phone, setPhone] = useState('+62 812 3456 7890');
-  const [location, setLocation] = useState('Jakarta, Indonesia');
-  const [birthDate, setBirthDate] = useState('15 March 1995');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [userId, setUserId] = useState('');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [location, setLocation] = useState('');
+  const [birthDate, setBirthDate] = useState('');
+  const [avatar, setAvatar] = useState('');
 
-  const handleSave = () => {
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  const loadUserData = async () => {
+    try {
+      setLoading(true);
+      const currentUser = auth.currentUser;
+      
+      if (!currentUser) {
+        Alert.alert('Error', 'Please login to edit profile');
+        router.back();
+        return;
+      }
+
+      const token = await currentUser.getIdToken();
+
+      // Use /api/auth/me to get current user
+      const response = await getMe(token);
+      
+      if (response.success && response.data) {
+        setUserId(response.data._id); // Save MongoDB _id for update
+        setName(response.data.userName || '');
+        setEmail(response.data.email || '');
+        setPhone(response.data.phone || '');
+        setAvatar(response.data.avatar || '');
+      } else {
+        Alert.alert('Error', 'Failed to load profile data');
+        router.back();
+      }
+    } catch (error) {
+      console.error('Load user error:', error);
+      Alert.alert('Error', 'Failed to load profile data');
+      router.back();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      // Validate input
+      if (!name.trim()) {
+        Alert.alert('Validation Error', 'Please enter your name');
+        return;
+      }
+
+      if (!phone.trim()) {
+        Alert.alert('Validation Error', 'Please enter your phone number');
+        return;
+      }
+
+      setSaving(true);
+      const currentUser = auth.currentUser;
+      
+      if (!currentUser) {
+        Alert.alert('Error', 'Please login to save changes');
+        return;
+      }
+
+      const token = await currentUser.getIdToken();
+
+      // Update user profile via API
+      const response = await updateUser(
+        userId,
+        {
+          userName: name.trim(),
+          phone: phone.trim(),
+          avatar: avatar,
+        },
+        token
+      );
+
+      if (response.success) {
+        Alert.alert(
+          'Success',
+          'Your profile has been updated successfully!',
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
+      } else {
+        Alert.alert('Error', response.message || 'Failed to update profile');
+      }
+    } catch (error: any) {
+      console.error('Save profile error:', error);
+      Alert.alert('Error', error.message || 'Failed to update profile');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const requestPermission = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Sorry, we need camera roll permissions to change your profile photo.');
+      return false;
+    }
+    return true;
+  };
+
+  const pickImageFromLibrary = async () => {
+    const hasPermission = await requestPermission();
+    if (!hasPermission) return;
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+      base64: true,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
+      setAvatar(base64Image);
+    }
+  };
+
+  const takePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Sorry, we need camera permissions to take a photo.');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+      base64: true,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
+      setAvatar(base64Image);
+    }
+  };
+
+  const removePhoto = () => {
     Alert.alert(
-      'Success',
-      'Your profile has been updated successfully!',
-      [{ text: 'OK', onPress: () => router.back() }]
+      'Remove Photo',
+      'Are you sure you want to remove your profile photo?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Remove', 
+          style: 'destructive',
+          onPress: () => setAvatar('')
+        }
+      ]
     );
   };
 
@@ -24,12 +176,30 @@ export default function EditProfileScreen() {
       'Change Profile Photo',
       'Choose an option',
       [
-        { text: 'Take Photo', onPress: () => console.log('Take photo') },
-        { text: 'Choose from Library', onPress: () => console.log('Choose photo') },
-        { text: 'Remove Photo', style: 'destructive', onPress: () => console.log('Remove') },
+        { text: 'Take Photo', onPress: takePhoto },
+        { text: 'Choose from Library', onPress: pickImageFromLibrary },
+        { text: 'Remove Photo', style: 'destructive', onPress: removePhoto },
         { text: 'Cancel', style: 'cancel' }
       ]
     );
+  };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#17A2B8" />
+        <Text style={{ marginTop: 12, fontSize: 16, color: '#666' }}>Loading profile...</Text>
+      </View>
+    );
+  }
+
+  const getInitials = (name: string) => {
+    if (!name) return 'U';
+    const names = name.split(' ');
+    if (names.length >= 2) {
+      return (names[0][0] + names[1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
   };
 
   return (
@@ -44,9 +214,15 @@ export default function EditProfileScreen() {
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         <View style={styles.avatarSection}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>HA</Text>
-          </View>
+          <TouchableOpacity onPress={handleChangePhoto}>
+            {avatar ? (
+              <Image source={{ uri: avatar }} style={styles.avatarImage} />
+            ) : (
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{getInitials(name)}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
           <TouchableOpacity style={styles.changePhotoButton} onPress={handleChangePhoto}>
             <Camera size={16} color="#17A2B8" />
             <Text style={styles.changePhotoText}>Change Photo</Text>
@@ -70,18 +246,19 @@ export default function EditProfileScreen() {
 
           <View style={styles.formGroup}>
             <Text style={styles.label}>Email Address</Text>
-            <View style={styles.inputContainer}>
+            <View style={[styles.inputContainer, styles.disabledInput]}>
               <Mail size={20} color="#999" />
               <TextInput
                 style={styles.input}
                 value={email}
-                onChangeText={setEmail}
                 placeholder="Enter your email"
                 placeholderTextColor="#999"
                 keyboardType="email-address"
                 autoCapitalize="none"
+                editable={false}
               />
             </View>
+            <Text style={styles.helperText}>Email cannot be changed</Text>
           </View>
 
           <View style={styles.formGroup}>
@@ -99,33 +276,21 @@ export default function EditProfileScreen() {
             </View>
           </View>
 
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Location</Text>
-            <View style={styles.inputContainer}>
-              <MapPin size={20} color="#999" />
-              <TextInput
-                style={styles.input}
-                value={location}
-                onChangeText={setLocation}
-                placeholder="Enter your location"
-                placeholderTextColor="#999"
-              />
-            </View>
-          </View>
 
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Date of Birth</Text>
-            <TouchableOpacity style={styles.inputContainer}>
-              <Calendar size={20} color="#999" />
-              <Text style={styles.dateText}>{birthDate}</Text>
-            </TouchableOpacity>
-          </View>
         </View>
       </ScrollView>
 
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>Save Changes</Text>
+        <TouchableOpacity 
+          style={[styles.saveButton, saving && styles.saveButtonDisabled]} 
+          onPress={handleSave}
+          disabled={saving}
+        >
+          {saving ? (
+            <ActivityIndicator color="white" />
+          ) : (
+            <Text style={styles.saveButtonText}>Save Changes</Text>
+          )}
         </TouchableOpacity>
       </View>
     </View>
@@ -177,6 +342,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
+  },
+  avatarImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    marginBottom: 12,
+    backgroundColor: '#f0f0f0',
   },
   avatarText: {
     fontSize: 36,
@@ -231,6 +403,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#1a1a1a',
   },
+  disabledInput: {
+    backgroundColor: '#F0F0F0',
+    opacity: 0.7,
+  },
+  helperText: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 4,
+    marginLeft: 4,
+  },
   footer: {
     position: 'absolute',
     bottom: 0,
@@ -247,10 +429,21 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#17A2B8',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  saveButtonDisabled: {
+    backgroundColor: '#999',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   saveButtonText: {
     color: 'white',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: -0.2,
   },
 });

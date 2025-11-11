@@ -3,7 +3,7 @@ import { ArrowLeft, Calendar, MapPin, Search as SearchIcon, SlidersHorizontal, S
 import { useState, useEffect } from 'react';
 import { Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, ActivityIndicator, Alert } from 'react-native';
 import FilterModal from '../components/FilterModal';
-import { searchHotelsByLocation, getFilteredHotels, getRecommendedHotels, Hotel } from '../services/hotelService';
+import { searchHotelsByLocation, getFilteredHotels, getAllHotels, Hotel } from '../services/hotelService';
 import { getImageUri } from '../utils/imageHelper';
 
 export default function SearchScreen() {
@@ -39,7 +39,7 @@ export default function SearchScreen() {
       setLoading(true);
       
       // Load tất cả hotels khi vào màn hình
-      const allHotelsResponse = await getRecommendedHotels(100);
+      const allHotelsResponse = await getAllHotels({ limit: 100 });
       if (allHotelsResponse.success && allHotelsResponse.data) {
         setRecommendations(allHotelsResponse.data);
         setSearchResults(allHotelsResponse.data); // Hiển thị tất cả ban đầu
@@ -64,7 +64,7 @@ export default function SearchScreen() {
       
       // Nếu search rỗng, hiển thị tất cả hotels
       if (!searchText.trim()) {
-        const allHotelsResponse = await getRecommendedHotels(100);
+        const allHotelsResponse = await getAllHotels({ limit: 100 });
         if (allHotelsResponse.success && allHotelsResponse.data) {
           setSearchResults(allHotelsResponse.data);
         }
@@ -106,10 +106,15 @@ export default function SearchScreen() {
       setLoading(true);
       setShowFilterModal(false);
       
+      // Convert priceRange array [min, max] to separate params
+      const minPrice = filters.priceRange ? filters.priceRange[0] : undefined;
+      const maxPrice = filters.priceRange ? filters.priceRange[1] : undefined;
+      
       const response = await getFilteredHotels({
         location: searchQuery || undefined,
-        priceRange: filters.priceRange,
-        minRating: filters.rating || undefined,
+        minPrice,
+        maxPrice,
+        rating: filters.rating || undefined,
       });
       
       if (response.success) {

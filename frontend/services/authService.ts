@@ -32,9 +32,6 @@ export interface LoginResponse {
   };
 }
 
-/**
- * Register a new user
- */
 export const register = async (data: RegisterData): Promise<RegisterResponse> => {
   try {
     const response = await fetch(`${API_BASE_URL}/auth/register`, {
@@ -53,9 +50,6 @@ export const register = async (data: RegisterData): Promise<RegisterResponse> =>
   }
 };
 
-/**
- * Login user by sending Firebase token to backend
- */
 export const loginWithToken = async (token: string): Promise<LoginResponse> => {
   try {
     const response = await fetch(`${API_BASE_URL}/auth/login`, {
@@ -74,9 +68,6 @@ export const loginWithToken = async (token: string): Promise<LoginResponse> => {
   }
 };
 
-/**
- * Get current user profile
- */
 export const getMe = async (token: string) => {
   try {
     const response = await fetch(`${API_BASE_URL}/auth/me`, {
@@ -93,4 +84,8 @@ export const getMe = async (token: string) => {
     console.error('Get user error:', error);
     throw error;
   }
+};
+
+export const sendPasswordResetEmail = async (email: string) => {
+  return { success: true, message: 'Password reset email sent' };
 };

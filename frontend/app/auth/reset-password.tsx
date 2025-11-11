@@ -1,21 +1,51 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { useState } from 'react';
-import { useRouter } from 'expo-router';
-import { ChevronLeft, Eye, EyeOff, Check } from 'lucide-react-native';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { ChevronLeft, Eye, EyeOff, Check, Lock } from 'lucide-react-native';
 
 export default function ResetPasswordScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const email = params.email as string;
+  const code = params.code as string;
+  
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const validatePassword = (password: string) => {
+    return password.length >= 6;
+  };
 
   const handleSubmit = () => {
-    setIsSuccess(true);
+    if (!password.trim()) {
+      Alert.alert('Error', 'Please enter a new password');
+      return;
+    }
+
+    if (!validatePassword(password)) {
+      Alert.alert('Error', 'Password must be at least 6 characters');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
+
+    setLoading(true);
+
     setTimeout(() => {
-      router.replace('/auth/login');
-    }, 1500);
+      setLoading(false);
+      setIsSuccess(true);
+      
+      setTimeout(() => {
+        router.replace('/auth/login');
+      }, 2000);
+    }, 1000);
   };
 
   if (isSuccess) {
@@ -23,11 +53,11 @@ export default function ResetPasswordScreen() {
       <View style={styles.container}>
         <View style={styles.successContainer}>
           <View style={styles.successIcon}>
-            <Check size={40} color="white" />
+            <Check size={48} color="white" />
           </View>
-          <Text style={styles.successTitle}>Congratulations!</Text>
+          <Text style={styles.successTitle}>Password Reset!</Text>
           <Text style={styles.successSubtitle}>
-            Your password has been reset successfully
+            Your password has been reset successfully. You can now login with your new password.
           </Text>
           <TouchableOpacity style={styles.submitButton} onPress={() => router.replace('/auth/login')}>
             <Text style={styles.submitButtonText}>Back to Login</Text>
@@ -44,15 +74,18 @@ export default function ResetPasswordScreen() {
       </TouchableOpacity>
 
       <View style={styles.content}>
-        <Text style={styles.title}>Forgot Password</Text>
+        <View style={styles.iconContainer}>
+          <Lock size={40} color="#17A2B8" />
+        </View>
+
+        <Text style={styles.title}>Reset Password</Text>
+        <Text style={styles.subtitle}>
+          Create a strong new password for your account
+        </Text>
 
         <View style={styles.form}>
-          <Text style={styles.description}>
-            Create a New Password
-          </Text>
-
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Password</Text>
+            <Text style={styles.label}>New Password</Text>
             <View style={styles.passwordContainer}>
               <TextInput
                 style={styles.passwordInput}
@@ -76,7 +109,7 @@ export default function ResetPasswordScreen() {
           </View>
 
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Confirmed New Password</Text>
+            <Text style={styles.label}>Confirm New Password</Text>
             <View style={styles.passwordContainer}>
               <TextInput
                 style={styles.passwordInput}
@@ -85,6 +118,7 @@ export default function ResetPasswordScreen() {
                 onChangeText={setConfirmPassword}
                 secureTextEntry={!showConfirmPassword}
                 placeholderTextColor="#999"
+                editable={!loading}
               />
               <TouchableOpacity
                 style={styles.eyeIcon}
@@ -99,8 +133,20 @@ export default function ResetPasswordScreen() {
             </View>
           </View>
 
-          <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-            <Text style={styles.submitButtonText}>Submit</Text>
+          <Text style={styles.passwordHint}>
+            Password must be at least 6 characters long
+          </Text>
+
+          <TouchableOpacity 
+            style={[styles.submitButton, loading && styles.submitButtonDisabled]} 
+            onPress={handleSubmit}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <Text style={styles.submitButtonText}>Reset Password</Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -122,21 +168,36 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    justifyContent: 'center',
+    paddingBottom: 80,
+  },
+  iconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#E3F7FA',
+    justifyContent: 'center',
+    alignItems: 'center',
+    alignSelf: 'center',
+    marginBottom: 30,
   },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
     color: '#1a1a1a',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 20,
     marginBottom: 40,
+    paddingHorizontal: 20,
   },
   form: {
-    flex: 1,
-  },
-  description: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1a1a1a',
-    marginBottom: 30,
+    width: '100%',
   },
   inputContainer: {
     marginBottom: 20,
@@ -164,6 +225,12 @@ const styles = StyleSheet.create({
   eyeIcon: {
     padding: 5,
   },
+  passwordHint: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 8,
+    marginBottom: 12,
+  },
   submitButton: {
     height: 56,
     backgroundColor: '#17A2B8',
@@ -171,6 +238,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 20,
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
   },
   submitButtonText: {
     color: 'white',

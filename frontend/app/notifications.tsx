@@ -1,122 +1,101 @@
-import { useRouter } from 'expo-router';
-import { ArrowLeft, Bell, Calendar, Check, ChevronRight, Clock, Tag, X } from 'lucide-react-native';
-import { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { ArrowLeft, Bell, Calendar, Check, ChevronRight, Clock, X } from 'lucide-react-native';
+import { useState, useCallback } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { getNotifications, markAsRead, markAllAsRead, deleteNotification, clearAllNotifications, Notification } from '../services/notificationService';
 
-type NotificationType = 'booking' | 'promotion' | 'reminder' | 'system';
-
-type Notification = {
-  id: number;
-  type: NotificationType;
-  title: string;
-  message: string;
-  time: string;
-  isRead: boolean;
-  actionable?: boolean;
-};
-
-const initialNotifications: Notification[] = [
-  {
-    id: 1,
-    type: 'booking',
-    title: 'Booking Confirmed',
-    message: 'Your booking at Hyatt Regency Bali has been confirmed for Sep 16-18.',
-    time: '2 hours ago',
-    isRead: false,
-    actionable: true,
-  },
-  {
-    id: 2,
-    type: 'promotion',
-    title: 'Special Offer! 20% Off',
-    message: 'Get 20% off on all beach resorts in Bali. Limited time offer!',
-    time: '5 hours ago',
-    isRead: false,
-    actionable: true,
-  },
-  {
-    id: 3,
-    type: 'reminder',
-    title: 'Upcoming Check-in',
-    message: 'Your check-in at Grand Bull is tomorrow at 2:00 PM.',
-    time: '1 day ago',
-    isRead: false,
-  },
-  {
-    id: 4,
-    type: 'booking',
-    title: 'Payment Successful',
-    message: 'Payment of $1,458.86 for Hyatt Regency Bali has been processed.',
-    time: '2 days ago',
-    isRead: true,
-  },
-  {
-    id: 5,
-    type: 'system',
-    title: 'Profile Updated',
-    message: 'Your profile information has been successfully updated.',
-    time: '3 days ago',
-    isRead: true,
-  },
-  {
-    id: 6,
-    type: 'promotion',
-    title: 'Loyalty Rewards',
-    message: 'You have earned 500 points! Redeem them for your next booking.',
-    time: '4 days ago',
-    isRead: true,
-  },
-  {
-    id: 7,
-    type: 'reminder',
-    title: 'Rate Your Stay',
-    message: 'How was your stay at Ocean Hotel? Share your experience.',
-    time: '5 days ago',
-    isRead: true,
-    actionable: true,
-  },
-];
+type NotificationType = 'booking_created' | 'booking_cancelled' | 'check_in_reminder';
 
 export default function NotificationsScreen() {
   const router = useRouter();
-  const [notifications, setNotifications] = useState<Notification[]>(initialNotifications);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Auto-reload notifications when screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      loadNotifications();
+    }, [])
+  );
+
+  const loadNotifications = async () => {
+    try {
+      setLoading(true);
+      const response = await getNotifications();
+      if (response.success) {
+        // Notifications already sorted by createdAt (newest first) in service
+        setNotifications(response.data);
+      } else {
+        Alert.alert('Error', response.error || 'Failed to load notifications');
+      }
+    } catch (error) {
+      console.error('Load notifications error:', error);
+      Alert.alert('Error', 'Failed to load notifications');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
   const getIcon = (type: NotificationType) => {
     switch (type) {
-      case 'booking':
+      case 'booking_created':
         return <Calendar size={20} color="#17A2B8" />;
-      case 'promotion':
-        return <Tag size={20} color="#4CD964" />;
-      case 'reminder':
+      case 'booking_cancelled':
+        return <X size={20} color="#FF3B30" />;
+      case 'check_in_reminder':
         return <Clock size={20} color="#FFB020" />;
-      case 'system':
-        return <Bell size={20} color="#666" />;
     }
   };
 
   const getIconBackground = (type: NotificationType) => {
     switch (type) {
-      case 'booking':
+      case 'booking_created':
         return '#E3F7FA';
-      case 'promotion':
-        return '#E8F8EA';
-      case 'reminder':
+      case 'booking_cancelled':
+        return '#FFE6E6';
+      case 'check_in_reminder':
         return '#FFF4E6';
-      case 'system':
-        return '#F0F0F0';
     }
   };
 
-  const handleMarkAsRead = (id: number) => {
-    setNotifications(notifications.map(n =>
-      n.id === id ? { ...n, isRead: true } : n
-    ));
+  const getTimeAgo = (dateString: string): string => {
+    const now = new Date();
+    const date = new Date(dateString);
+    const diffInMs = now.getTime() - date.getTime();
+    const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
+    
+    if (diffInMinutes < 1) return 'Just now';
+    if (diffInMinutes < 60) return `${diffInMinutes} minute${diffInMinutes > 1 ? 's' : ''} ago`;
+    
+    const diffInHours = Math.floor(diffInMinutes / 60);
+    if (diffInHours < 24) return `${diffInHours} hour${diffInHours > 1 ? 's' : ''} ago`;
+    
+    const diffInDays = Math.floor(diffInHours / 24);
+    if (diffInDays < 7) return `${diffInDays} day${diffInDays > 1 ? 's' : ''} ago`;
+    
+    const diffInWeeks = Math.floor(diffInDays / 7);
+    return `${diffInWeeks} week${diffInWeeks > 1 ? 's' : ''} ago`;
   };
 
-  const handleDelete = (id: number, title: string) => {
+  const handleMarkAsRead = async (id: string) => {
+    try {
+      const response = await markAsRead(id);
+      if (response.success) {
+        setNotifications(notifications.map(n =>
+          n.id === id ? { ...n, isRead: true } : n
+        ));
+      }
+    } catch (error) {
+      console.error('Mark as read error:', error);
+    }
+  };
+
+  const handleDelete = async (id: string, title: string) => {
     Alert.alert(
       'Delete Notification',
       `Delete "${title}"?`,
@@ -125,33 +104,67 @@ export default function NotificationsScreen() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            setNotifications(notifications.filter(n => n.id !== id));
+          onPress: async () => {
+            const response = await deleteNotification(id);
+            if (response.success) {
+              setNotifications(notifications.filter(n => n.id !== id));
+            }
           },
         },
       ]
     );
   };
 
-  const handleMarkAllAsRead = () => {
-    setNotifications(notifications.map(n => ({ ...n, isRead: true })));
+  const handleMarkAllAsRead = async () => {
+    try {
+      const response = await markAllAsRead();
+      if (response.success) {
+        await loadNotifications(); // Reload to get updated status
+      }
+    } catch (error) {
+      console.error('Mark all as read error:', error);
+    }
   };
 
   const handleClearAll = () => {
     Alert.alert(
       'Clear All Notifications',
-      'Are you sure you want to clear all notifications?',
+      'This will hide all current notifications. Are you sure?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Clear All',
           style: 'destructive',
-          onPress: () => {
-            setNotifications([]);
+          onPress: async () => {
+            try {
+              const response = await clearAllNotifications();
+              if (response.success) {
+                // Reload to show empty state
+                await loadNotifications();
+              } else {
+                Alert.alert('Error', 'Failed to clear notifications');
+              }
+            } catch (error) {
+              console.error('Clear all error:', error);
+              Alert.alert('Error', 'Failed to clear notifications');
+            }
           },
         },
       ]
     );
+  };
+
+  const handleNotificationPress = (notification: Notification) => {
+    // Mark as read first
+    if (!notification.isRead) {
+      handleMarkAsRead(notification.id);
+    }
+    
+    // Navigate to booking detail - use router.push with proper type
+    router.push({
+      pathname: '/booking/id' as any,
+      params: { id: notification.bookingId }
+    });
   };
 
   const filteredNotifications = filter === 'unread'
@@ -200,22 +213,29 @@ export default function NotificationsScreen() {
 
       {/* Notifications List */}
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-        {filteredNotifications.length === 0 ? (
+        {loading ? (
+          <View style={styles.emptyState}>
+            <ActivityIndicator size="large" color="#17A2B8" />
+            <Text style={styles.emptyText}>Loading notifications...</Text>
+          </View>
+        ) : filteredNotifications.length === 0 ? (
           <View style={styles.emptyState}>
             <Bell size={64} color="#E5E7EB" />
             <Text style={styles.emptyTitle}>No Notifications</Text>
             <Text style={styles.emptyText}>
               {filter === 'unread'
                 ? 'You have no unread notifications'
-                : 'You have no notifications yet'}
+                : 'Your notifications will appear here when you create bookings'}
             </Text>
           </View>
         ) : (
           <>
             {filteredNotifications.map((notification) => (
-              <View
+              <TouchableOpacity
                 key={notification.id}
                 style={[styles.notificationCard, !notification.isRead && styles.notificationUnread]}
+                onPress={() => handleNotificationPress(notification)}
+                activeOpacity={0.7}
               >
                 <View style={styles.notificationMain}>
                   <View
@@ -233,14 +253,12 @@ export default function NotificationsScreen() {
                       {!notification.isRead && <View style={styles.unreadDot} />}
                     </View>
                     <Text style={styles.notificationMessage}>{notification.message}</Text>
-                    <Text style={styles.notificationTime}>{notification.time}</Text>
+                    <Text style={styles.notificationTime}>{getTimeAgo(notification.createdAt)}</Text>
 
-                    {notification.actionable && (
-                      <TouchableOpacity style={styles.actionButton}>
-                        <Text style={styles.actionButtonText}>View Details</Text>
-                        <ChevronRight size={14} color="#17A2B8" />
-                      </TouchableOpacity>
-                    )}
+                    <View style={styles.actionButton}>
+                      <Text style={styles.actionButtonText}>View Booking</Text>
+                      <ChevronRight size={14} color="#17A2B8" />
+                    </View>
                   </View>
                 </View>
 
@@ -248,27 +266,37 @@ export default function NotificationsScreen() {
                   {!notification.isRead && (
                     <TouchableOpacity
                       style={styles.actionIcon}
-                      onPress={() => handleMarkAsRead(notification.id)}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handleMarkAsRead(notification.id);
+                      }}
                     >
                       <Check size={18} color="#4CD964" />
                     </TouchableOpacity>
                   )}
                   <TouchableOpacity
                     style={styles.actionIcon}
-                    onPress={() => handleDelete(notification.id, notification.title)}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleDelete(notification.id, notification.title);
+                    }}
                   >
                     <X size={18} color="#FF3B30" />
                   </TouchableOpacity>
                 </View>
-              </View>
+              </TouchableOpacity>
             ))}
 
-            {notifications.length > 0 && (
-              <TouchableOpacity style={styles.clearAllButton} onPress={handleClearAll}>
-                <Text style={styles.clearAllText}>Clear All Notifications</Text>
-              </TouchableOpacity>
-            )}
+
           </>
+        )}
+
+        {/* Clear All Button at Bottom */}
+        {!loading && notifications.length > 0 && (
+          <TouchableOpacity style={styles.clearAllButton} onPress={handleClearAll}>
+            <X size={18} color="#FF3B30" />
+            <Text style={styles.clearAllText}>Clear All Notifications</Text>
+          </TouchableOpacity>
         )}
       </ScrollView>
     </View>
@@ -458,16 +486,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   clearAllButton: {
-    marginTop: 12,
-    paddingVertical: 14,
+    flexDirection: 'row',
+    marginTop: 20,
+    marginBottom: 10,
+    paddingVertical: 16,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderWidth: 1.5,
+    borderColor: '#FF3B30',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: 'white',
+    gap: 8,
   },
   clearAllText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
     color: '#FF3B30',
   },

@@ -1,13 +1,29 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
-import { useState, useRef } from 'react';
-import { useRouter } from 'expo-router';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { useState, useRef, useEffect } from 'react';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ChevronLeft, Check } from 'lucide-react-native';
 
 export default function VerificationScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const email = params.email as string || 'your email';
+  const type = params.type as string || 'register';
+  
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const [isVerified, setIsVerified] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [resendTimer, setResendTimer] = useState(60);
+  const [canResend, setCanResend] = useState(false);
   const inputRefs = useRef<(TextInput | null)[]>([]);
+
+  useEffect(() => {
+    if (resendTimer > 0) {
+      const timer = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
+      return () => clearTimeout(timer);
+    } else {
+      setCanResend(true);
+    }
+  }, [resendTimer]);
 
   const handleCodeChange = (text: string, index: number) => {
     const newCode = [...code];
@@ -26,10 +42,45 @@ export default function VerificationScreen() {
   };
 
   const handleVerify = () => {
-    setIsVerified(true);
+    const verificationCode = code.join('');
+    
+    if (verificationCode.length !== 6) {
+      Alert.alert('Error', 'Please enter the complete 6-digit code');
+      return;
+    }
+
+    setLoading(true);
+
     setTimeout(() => {
-      router.replace('/tabs');
-    }, 1500);
+      setLoading(false);
+      setIsVerified(true);
+      
+      setTimeout(() => {
+        if (type === 'forgot-password') {
+          router.replace({
+            pathname: '/auth/reset-password',
+            params: { email, code: verificationCode }
+          });
+        } else {
+          router.replace('/tabs');
+        }
+      }, 1500);
+    }, 1000);
+  };
+
+  const handleResendCode = () => {
+    if (!canResend) return;
+
+    Alert.alert(
+      'Resend Code',
+      'A new verification code has been sent to your email',
+      [{ text: 'OK' }]
+    );
+    
+    setResendTimer(60);
+    setCanResend(false);
+    setCode(['', '', '', '', '', '']);
+    inputRefs.current[0]?.focus();
   };
 
   return (
@@ -52,12 +103,14 @@ export default function VerificationScreen() {
         </View>
 
         <Text style={styles.title}>
-          {isVerified ? 'Congratulations!' : 'Please Verify Your Email'}
+          {isVerified ? 'Verified!' : 'Email Verification'}
         </Text>
         <Text style={styles.subtitle}>
           {isVerified
-            ? 'Your account has been verified successfully'
-            : 'Enter the 6-digit code we sent to\nhasanabdulgaffar@gmail.com'}
+            ? type === 'forgot-password'
+              ? 'Code verified! Redirecting to reset password...'
+              : 'Your account has been verified successfully'
+            : `Enter the 6-digit code we sent to\n${email}`}
         </Text>
 
         {!isVerified && (
@@ -83,14 +136,27 @@ export default function VerificationScreen() {
               ))}
             </View>
 
-            <TouchableOpacity style={styles.verifyButton} onPress={handleVerify}>
-              <Text style={styles.verifyButtonText}>Verify</Text>
+            <TouchableOpacity 
+              style={[styles.verifyButton, loading && styles.verifyButtonDisabled]} 
+              onPress={handleVerify}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text style={styles.verifyButtonText}>Verify Code</Text>
+              )}
             </TouchableOpacity>
 
             <View style={styles.footer}>
               <Text style={styles.footerText}>Didn't receive the code? </Text>
-              <TouchableOpacity>
-                <Text style={styles.footerLink}>Resend Code</Text>
+              <TouchableOpacity 
+                onPress={handleResendCode}
+                disabled={!canResend}
+              >
+                <Text style={[styles.footerLink, !canResend && styles.footerLinkDisabled]}>
+                  {canResend ? 'Resend Code' : `Resend in ${resendTimer}s`}
+                </Text>
               </TouchableOpacity>
             </View>
           </>
@@ -190,6 +256,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
+  verifyButtonDisabled: {
+    opacity: 0.6,
+  },
   verifyButtonText: {
     color: 'white',
     fontSize: 16,
@@ -207,5 +276,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#17A2B8',
     fontWeight: '600',
+  },
+  footerLinkDisabled: {
+    color: '#999',
   },
 });

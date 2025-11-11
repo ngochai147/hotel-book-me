@@ -1,6 +1,6 @@
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Filter, Heart, MapPin, Star, X } from 'lucide-react-native';
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
 import { getUserFavorites, toggleFavorite } from '../../services/userService';
 import { getMe } from '../../services/authService';
@@ -18,14 +18,17 @@ export default function FavoritesScreen() {
   const [selectedFilter, setSelectedFilter] = useState<SortType>('Resort Location');
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [tempFilters, setTempFilters] = useState({
-    priceRange: [0, 100],
+    priceRange: [0, 500],
     minRating: 0,
     locations: [] as string[],
   });
 
-  useEffect(() => {
-    loadUserAndFavorites();
-  }, []);
+  // Reload favorites every time screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      loadUserAndFavorites();
+    }, [])
+  );
 
   const loadUserAndFavorites = async () => {
     try {
@@ -124,18 +127,56 @@ export default function FavoritesScreen() {
 
   const handleApplyFilters = () => {
     setShowFilterModal(false);
-    Alert.alert('Filters Applied', 'Your filter preferences have been saved.');
   };
 
   const handleResetFilters = () => {
     setTempFilters({
-      priceRange: [0, 100],
+      priceRange: [0, 500],
       minRating: 0,
       locations: [],
     });
   };
 
-  const sortedFavorites = getSortedFavorites();
+  const getFilteredAndSortedFavorites = () => {
+    let filtered = [...favorites];
+
+    // Apply price filter
+    filtered = filtered.filter(hotel => {
+      const minPrice = hotel.roomTypes && hotel.roomTypes.length > 0
+        ? Math.min(...hotel.roomTypes.map(r => r.price))
+        : 0;
+      return minPrice >= tempFilters.priceRange[0] && minPrice <= tempFilters.priceRange[1];
+    });
+
+    // Apply rating filter
+    if (tempFilters.minRating > 0) {
+      filtered = filtered.filter(hotel => (hotel.rating || 0) >= tempFilters.minRating);
+    }
+
+    // Apply location filter
+    if (tempFilters.locations.length > 0) {
+      filtered = filtered.filter(hotel => 
+        tempFilters.locations.some(loc => hotel.location.toLowerCase().includes(loc.toLowerCase()))
+      );
+    }
+
+    // Sort
+    switch (selectedFilter) {
+      case 'Price':
+        return filtered.sort((a, b) => {
+          const priceA = a.roomTypes && a.roomTypes.length > 0 ? Math.min(...a.roomTypes.map(r => r.price)) : 0;
+          const priceB = b.roomTypes && b.roomTypes.length > 0 ? Math.min(...b.roomTypes.map(r => r.price)) : 0;
+          return priceA - priceB;
+        });
+      case 'Rating':
+        return filtered.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+      case 'Resort Location':
+      default:
+        return filtered.sort((a, b) => a.location.localeCompare(b.location));
+    }
+  };
+
+  const displayedFavorites = getFilteredAndSortedFavorites();
 
   if (loading) {
     return (
@@ -146,11 +187,23 @@ export default function FavoritesScreen() {
     );
   }
 
+  const activeFiltersCount = 
+    (tempFilters.minRating > 0 ? 1 : 0) + 
+    (tempFilters.locations.length > 0 ? 1 : 0) +
+    (tempFilters.priceRange[0] > 0 || tempFilters.priceRange[1] < 500 ? 1 : 0);
+
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>My Favourites</Text>
-        <Text style={styles.subtitle}>{favorites.length} hotels saved</Text>
+      <View style={styles.headerGradient}>
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.title}>❤️ My Favourites</Text>
+            <Text style={styles.subtitle}>
+              {displayedFavorites.length} {displayedFavorites.length === 1 ? 'hotel' : 'hotels'}
+              {favorites.length !== displayedFavorites.length && ` of ${favorites.length}`}
+            </Text>
+          </View>
+        </View>
       </View>
 
       <View style={styles.filterContainer}>
@@ -184,12 +237,7 @@ export default function FavoritesScreen() {
             </Text>
           </TouchableOpacity>
         </ScrollView>
-        <TouchableOpacity 
-          style={styles.filterIconButton}
-          onPress={() => setShowFilterModal(true)}
-        >
-          <Filter size={20} color="#17A2B8" />
-        </TouchableOpacity>
+        
       </View>
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
@@ -201,9 +249,23 @@ export default function FavoritesScreen() {
               Start adding hotels to your favourites to see them here
             </Text>
           </View>
+        ) : displayedFavorites.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Filter size={64} color="#E5E7EB" />
+            <Text style={styles.emptyTitle}>No Results Found</Text>
+            <Text style={styles.emptyText}>
+              Try adjusting your filters to see more hotels
+            </Text>
+            <TouchableOpacity 
+              style={styles.clearFiltersButton}
+              onPress={handleResetFilters}
+            >
+              <Text style={styles.clearFiltersText}>Clear All Filters</Text>
+            </TouchableOpacity>
+          </View>
         ) : (
           <View style={styles.grid}>
-            {sortedFavorites.map((hotel) => {
+            {displayedFavorites.map((hotel) => {
               const minPrice = hotel.roomTypes && hotel.roomTypes.length > 0
                 ? Math.min(...hotel.roomTypes.map(r => r.price))
                 : 0;
@@ -364,7 +426,7 @@ export default function FavoritesScreen() {
               <View style={styles.filterSection}>
                 <Text style={styles.filterSectionTitle}>Locations</Text>
                 <View style={styles.locationOptions}>
-                  {['Bali', 'Dubai', 'Auckland', 'Maldives', 'Paris'].map((location) => (
+                  {['Saigon', 'District 1', 'District 3', 'Ho Chi Minh', 'Vietnam'].map((location) => (
                     <TouchableOpacity
                       key={location}
                       style={[
@@ -412,41 +474,58 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8F9FA',
   },
+  headerGradient: {
+    backgroundColor: '#17A2B8',
+    paddingBottom: 20,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
   header: {
-    padding: 20,
+    paddingHorizontal: 20,
     paddingTop: 60,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    paddingBottom: 16,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 4,
+    color: 'white',
+    marginBottom: 6,
+    letterSpacing: -0.5,
   },
   subtitle: {
-    fontSize: 13,
-    color: '#666',
+    fontSize: 15,
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontWeight: '500',
   },
   filterContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 16,
     paddingLeft: 20,
     paddingRight: 10,
     backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    marginTop: 16,
+    marginHorizontal: 20,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
     gap: 10,
   },
   filterScroll: {
     gap: 10,
   },
   filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 24,
     backgroundColor: '#F8F9FA',
     borderWidth: 1,
     borderColor: '#E5E7EB',
@@ -454,23 +533,47 @@ const styles = StyleSheet.create({
   filterChipActive: {
     backgroundColor: '#17A2B8',
     borderColor: '#17A2B8',
+    shadowColor: '#17A2B8',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   filterText: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#666',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   filterTextActive: {
     color: 'white',
   },
   filterIconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#E3F7FA',
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 'auto',
+    position: 'relative',
+  },
+  filterBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FF3B30',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
+  },
+  filterBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: 'white',
   },
   content: {
     flex: 1,
@@ -481,95 +584,124 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 80,
+    paddingVertical: 100,
   },
   emptyTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#1a1a1a',
-    marginTop: 16,
-    marginBottom: 8,
+    marginTop: 20,
+    marginBottom: 10,
+    letterSpacing: -0.5,
   },
   emptyText: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#666',
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 22,
+    paddingHorizontal: 40,
+  },
+  clearFiltersButton: {
+    marginTop: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: '#17A2B8',
+    borderRadius: 24,
+    shadowColor: '#17A2B8',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  clearFiltersText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: 'white',
+    letterSpacing: -0.2,
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 14,
   },
   card: {
     width: '48%',
     backgroundColor: 'white',
-    borderRadius: 12,
+    borderRadius: 16,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 6,
   },
   image: {
     width: '100%',
-    height: 110,
+    height: 130,
   },
   favoriteButton: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    top: 10,
+    right: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
   info: {
-    padding: 10,
+    padding: 12,
   },
   name: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '700',
     color: '#1a1a1a',
-    marginBottom: 3,
+    marginBottom: 4,
+    letterSpacing: -0.2,
   },
   meta: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
-    gap: 3,
+    marginBottom: 8,
+    gap: 4,
   },
   location: {
-    fontSize: 10,
+    fontSize: 11,
     color: '#666',
     flex: 1,
+    fontWeight: '500',
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: 4,
   },
   rating: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 4,
   },
   ratingText: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
     color: '#1a1a1a',
   },
   price: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: 'bold',
     color: '#17A2B8',
+    letterSpacing: -0.3,
   },
   priceUnit: {
-    fontSize: 10,
-    fontWeight: 'normal',
+    fontSize: 11,
+    fontWeight: '500',
     color: '#666',
   },
   // Modal styles
@@ -588,14 +720,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    padding: 24,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#1a1a1a',
+    letterSpacing: -0.5,
   },
   modalBody: {
     padding: 20,
@@ -719,30 +852,39 @@ const styles = StyleSheet.create({
     padding: 20,
     borderTopWidth: 1,
     borderTopColor: '#f0f0f0',
+    backgroundColor: '#F8F9FA',
   },
   resetButton: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
+    paddingVertical: 16,
+    borderRadius: 14,
+    borderWidth: 1.5,
     borderColor: '#E5E7EB',
     alignItems: 'center',
+    backgroundColor: 'white',
   },
   resetButtonText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#666',
+    letterSpacing: -0.2,
   },
   applyButton: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: 16,
+    borderRadius: 14,
     backgroundColor: '#17A2B8',
     alignItems: 'center',
+    shadowColor: '#17A2B8',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   applyButtonText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     color: 'white',
+    letterSpacing: -0.2,
   },
 });
