@@ -1,6 +1,6 @@
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Calendar, MapPin, Users } from 'lucide-react-native';
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
 import { getMyBookings, cancelBooking, Booking as BookingType } from '../../services/bookingService';
 import { auth } from '../../config/firebase';
@@ -15,9 +15,12 @@ export default function BookingScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadBookings();
-  }, [activeTab]);
+  // Reload bookings when screen is focused or tab changes
+  useFocusEffect(
+    useCallback(() => {
+      loadBookings();
+    }, [activeTab])
+  );
 
   const loadBookings = async () => {
     try {
@@ -32,7 +35,11 @@ export default function BookingScreen() {
       const response = await getMyBookings(token, activeTab);
       
       if (response.success) {
-        setBookings(response.data);
+        // Remove duplicates based on booking ID
+        const uniqueBookings = response.data.filter((booking, index, self) =>
+          index === self.findIndex((b) => b._id === booking._id)
+        );
+        setBookings(uniqueBookings);
       } else {
         Alert.alert('Error', 'Failed to load bookings');
       }
@@ -101,8 +108,7 @@ export default function BookingScreen() {
         Alert.alert('Error', 'Hotel information not available');
         return;
       }
-      const imageUrl = hotel.photos?.[0] ? getImageUri(hotel.photos[0]) : '';
-      const url = `/review/${hotel._id}?hotelName=${encodeURIComponent(hotel.name)}&hotelLocation=${encodeURIComponent(hotel.location)}&hotelImage=${encodeURIComponent(imageUrl)}`;
+      const url = `/review/create?hotelId=${hotel._id}`;
       router.push(url as any);
     } catch (error) {
       console.error('Add review error:', error);
@@ -254,7 +260,7 @@ export default function BookingScreen() {
                       </TouchableOpacity>
                       <TouchableOpacity 
                         style={styles.rebookButton}
-                        onPress={() => handleRebook(booking)}
+                        onPress={() => router.push(`/booking/${booking._id}` as any)}
                       >
                         <Text style={styles.rebookButtonText}>View Details</Text>
                       </TouchableOpacity>

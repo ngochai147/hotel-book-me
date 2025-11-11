@@ -1,151 +1,160 @@
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { ChevronLeft, Heart, MapPin, Share2, Star } from "lucide-react-native"
-import { useState } from "react"
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
-
-type Hotel = {
-  name: string
-  location: string
-  rating: number
-  reviews: number
-  price: number
-  image: string
-  description: string
-  facilities: string[]
-  ratingBreakdown: { stars: number; count: number; percentage: number }[]
-  reviews_list: { id: number; author: string; rating: number; date: string; text: string; avatar: string }[]
-  roomTypes: { id: number; name: string; guests: number; area: string; amenities: string[]; price: number; image: string }[]
-  facilities_list: { category: string; items: string[] }[]
-}
-
-const hotelDetails: Record<string, Hotel> = {
-  "1": {
-    name: "Hyatt Regency Bali",
-    location: "Jl. Danau Tamblingan No. 89, Sanur, Denpasar",
-    rating: 4.8,
-    reviews: 374,
-    price: 56,
-    image: "https://images.pexels.com/photos/164595/pexels-photo-164595.jpeg?auto=compress&cs=tinysrgb&w=600",
-    description:
-      "Set on the old site of Bali Hyatt on the main street of Sanur, the hotel is located on a delightful beachfront and nine hectares of lush.",
-    facilities: ["Wifi", "Pool", "Beach", "AC", "Gym"],
-    ratingBreakdown: [
-      { stars: 5, count: 250, percentage: 67 },
-      { stars: 4, count: 80, percentage: 21 },
-      { stars: 3, count: 30, percentage: 8 },
-      { stars: 2, count: 10, percentage: 3 },
-      { stars: 1, count: 4, percentage: 1 },
-    ],
-    reviews_list: [
-      {
-        id: 1,
-        author: "Abraham Adam",
-        rating: 5,
-        date: "2 days ago",
-        text: "First of all, the location of this hotel is between the beach and fun street where full of shops, restaurants/bars, spas, and more.",
-        avatar: "https://i.pravatar.cc/150?img=1",
-      },
-      {
-        id: 2,
-        author: "Jessica Wong",
-        rating: 5,
-        date: "5 days ago",
-        text: "Beautiful hotel which had everything you could need. Rooms were spotless and well appointed.",
-        avatar: "https://i.pravatar.cc/150?img=2",
-      },
-      {
-        id: 3,
-        author: "Joe Alexander",
-        rating: 5,
-        date: "1 week ago",
-        text: "The rooms were spacious, clean, and offered breathtaking views of the ocean. I loved waking up to the sound of the waves and enjoying my coffee.",
-        avatar: "https://i.pravatar.cc/150?img=3",
-      },
-    ],
-    roomTypes: [
-      {
-        id: 1,
-        name: "Twin View Room",
-        guests: 2,
-        area: "Seating Area",
-        amenities: ["Shower", "Air Conditioning"],
-        price: 56,
-        image: "https://images.pexels.com/photos/271624/pexels-photo-271624.jpeg?auto=compress&cs=tinysrgb&w=400",
-      },
-      {
-        id: 2,
-        name: "Suite King Bed",
-        guests: 2,
-        area: "Dining Area",
-        amenities: ["Bathtub", "Air Conditioning"],
-        price: 64,
-        image: "https://images.pexels.com/photos/271897/pexels-photo-271897.jpeg?auto=compress&cs=tinysrgb&w=400",
-      },
-    ],
-    facilities_list: [
-      {
-        category: "Hotel Service",
-        items: [
-          "Laundry",
-          "Medical Services",
-          "Money Changer",
-          "Luggage Storage",
-          "Tours",
-          "Concierge",
-          "24 hour Security",
-          "Bellhop",
-        ],
-      },
-      {
-        category: "Things to Do",
-        items: ["Beach", "Water Sports", "Hiking", "Cycling"],
-      },
-      {
-        category: "Foods and Drinks",
-        items: ["Restaurant", "Bar", "Cafe", "Room Service"],
-      },
-      {
-        category: "General",
-        items: ["WiFi", "Parking", "Elevator", "Front Desk"],
-      },
-      {
-        category: "Nearby Facilities",
-        items: ["Shopping Mall", "Hospital", "Airport", "Train Station"],
-      },
-      {
-        category: "Public Facilities",
-        items: ["Swimming Pool", "Gym", "Spa", "Conference Room"],
-      },
-      {
-        category: "Sports and Recreations",
-        items: ["Tennis Court", "Basketball Court", "Yoga", "Meditation"],
-      },
-      {
-        category: "Transportation",
-        items: ["Airport Shuttle", "Car Rental", "Taxi Service", "Bike Rental"],
-      },
-    ],
-  },
-}
+import { useState, useEffect } from "react"
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator, Alert } from "react-native"
+import { getHotelById, Hotel } from "../../services/hotelService"
+import { getReviewsByHotelId, Review } from "../../services/reviewService"
+import { toggleFavorite, getUserFavorites } from "../../services/userService"
+import { getMe } from "../../services/authService"
+import { auth } from "../../config/firebase"
+import { getImageUri } from "../../utils/imageHelper"
+import MapView, { Marker } from 'react-native-maps';
 
 export default function HotelDetailScreen() {
   const router = useRouter()
   const { id } = useLocalSearchParams()
-  const hotel = id ? hotelDetails[String(id)] : undefined
+  const [hotel, setHotel] = useState<Hotel | null>(null)
+  const [reviews, setReviews] = useState<Review[]>([])
   const [isFavorite, setIsFavorite] = useState(false)
   const [expandedFacility, setExpandedFacility] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [userId, setUserId] = useState<string>('')
+  const [selectedRooms, setSelectedRooms] = useState<string[]>([]) // Array of room type names
+
+  useEffect(() => {
+    if (id) {
+      loadHotelData();
+      checkFavoriteStatus();
+    }
+  }, [id]);
+
+  const loadHotelData = async () => {
+    try {
+      setLoading(true);
+      
+      // Load hotel details
+      const hotelResponse = await getHotelById(String(id));
+      if (hotelResponse.success && hotelResponse.data) {
+        setHotel(hotelResponse.data);
+      } else {
+        Alert.alert('Error', 'Failed to load hotel details');
+        return;
+      }
+
+      // Load reviews
+      const reviewsResponse = await getReviewsByHotelId(String(id));
+      if (reviewsResponse.success) {
+        setReviews(reviewsResponse.data);
+      }
+      
+    } catch (error) {
+      console.error('Load hotel data error:', error);
+      Alert.alert('Error', 'Failed to load hotel details');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const checkFavoriteStatus = async () => {
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) return;
+
+      const token = await currentUser.getIdToken();
+      
+      // Get user ID first
+      const userResponse = await getMe(token);
+      if (!userResponse.success || !userResponse.data) return;
+      
+      setUserId(userResponse.data._id);
+      
+      // Get favorites
+      const favoritesResponse = await getUserFavorites(userResponse.data._id, token);
+      
+      if (favoritesResponse.success && favoritesResponse.data) {
+        const isFav = favoritesResponse.data.some((fav: any) => {
+          const hotelId = typeof fav === 'string' ? fav : fav._id;
+          return hotelId === id;
+        });
+        setIsFavorite(isFav);
+      }
+    } catch (error) {
+      console.error('Check favorite error:', error);
+    }
+  };
+
+  const handleToggleFavorite = async () => {
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        Alert.alert('Login Required', 'Please login to add favorites');
+        router.replace('/auth/login');
+        return;
+      }
+
+      if (!userId) {
+        Alert.alert('Error', 'User ID not found. Please refresh the page.');
+        return;
+      }
+
+      const token = await currentUser.getIdToken();
+      const response = await toggleFavorite(userId, String(id), token, isFavorite);
+      
+      if (response.success) {
+        setIsFavorite(!isFavorite);
+      } else {
+        Alert.alert('Error', response.message || 'Failed to update favorite');
+      }
+    } catch (error) {
+      console.error('Toggle favorite error:', error);
+      Alert.alert('Error', 'Failed to update favorite');
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#17A2B8" />
+        <Text style={{ marginTop: 10, color: '#666' }}>Loading hotel details...</Text>
+      </View>
+    );
+  }
 
   if (!hotel) {
     return (
-      <View style={styles.container}>
-        <Text>Hotel not found</Text>
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: '#666' }}>Hotel not found</Text>
+        <TouchableOpacity 
+          style={{ marginTop: 20, padding: 12, backgroundColor: '#17A2B8', borderRadius: 8 }}
+          onPress={() => router.back()}
+        >
+          <Text style={{ color: 'white' }}>Go Back</Text>
+        </TouchableOpacity>
       </View>
     )
   }
 
+  const calculateRatingBreakdown = (reviews: Review[]) => {
+    const breakdown = [5, 4, 3, 2, 1].map(stars => {
+      const count = reviews.filter(r => Math.floor(r.rating) === stars).length;
+      const percentage = reviews.length > 0 ? (count / reviews.length) * 100 : 0;
+      return { stars, count, percentage: Math.round(percentage) };
+    });
+    return breakdown;
+  };
+
+  const ratingBreakdown = calculateRatingBreakdown(reviews);
+  const minPrice = hotel.roomTypes && hotel.roomTypes.length > 0
+    ? Math.min(...hotel.roomTypes.map(r => r.price))
+    : 0;
+
+  const galleryImages = hotel.photos && hotel.photos.length > 0 
+    ? hotel.photos.map(photo => getImageUri(photo))
+    : ['https://images.pexels.com/photos/164595/pexels-photo-164595.jpeg?auto=compress&cs=tinysrgb&w=600'];
+
   const renderRatingBreakdown = () => (
     <View style={styles.ratingBreakdownContainer}>
-      {hotel.ratingBreakdown.map((item, index) => (
+      {ratingBreakdown.map((item, index) => (
         <View key={index} style={styles.ratingRow}>
           <View style={styles.ratingStars}>
             {[...Array(5)].map((_, i) => (
@@ -165,102 +174,154 @@ export default function HotelDetailScreen() {
       ))}
     </View>
   )
-
-  const renderLocationMap = () => (
+  const hotelCoordinates = {
+    latitude: hotel.coordinates?.latitude || 10.8231, // Default: TP.HCM
+    longitude: hotel.coordinates?.longitude || 106.6297,
+  };
+  const renderLocationMap = () =>  (
     <View style={styles.locationMapContainer}>
-      <View style={styles.mapPlaceholder}>
-        <MapPin size={40} color="#17A2B8" />
-        <Text style={styles.mapText}>Location Map</Text>
-      </View>
+      <MapView
+        style={styles.map}
+        initialRegion={{
+          latitude: hotelCoordinates.latitude,
+          longitude: hotelCoordinates.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        }}
+      >
+        <Marker
+          coordinate={hotelCoordinates}
+          title={hotel.name}
+          description={hotel.location}
+        >
+          <View style={styles.customMarker}>
+            <MapPin size={30} color="#17A2B8" fill="#17A2B8" />
+          </View>
+        </Marker>
+      </MapView>
+      
       <View style={styles.locationInfo}>
         <MapPin size={16} color="#17A2B8" />
-        <Text style={styles.locationAddress}>{hotel.location}</Text>
+        <Text style={styles.locationAddress}>{hotel.address}</Text>
       </View>
     </View>
-  )
+  );
 
-  const renderReviewItem = (review: any) => (
-    <View style={styles.reviewItem} key={review.id}>
-      <Image source={{ uri: review.avatar }} style={styles.reviewAvatar} />
-      <View style={styles.reviewContent}>
-        <View style={styles.reviewHeader}>
-          <Text style={styles.reviewAuthor}>{review.author}</Text>
-          <Text style={styles.reviewDate}>{review.date}</Text>
-        </View>
-        <View style={styles.reviewRating}>
-          {[...Array(5)].map((_, i) => (
-            <Star
-              key={i}
-              size={12}
-              color={i < review.rating ? "#FFA500" : "#E5E7EB"}
-              fill={i < review.rating ? "#FFA500" : "none"}
-            />
-          ))}
-        </View>
-        <Text style={styles.reviewText}>{review.text}</Text>
-      </View>
-    </View>
-  )
+  const formatReviewDate = (date: Date | string) => {
+    const reviewDate = new Date(date);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - reviewDate.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return '1 day ago';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)} week${Math.floor(diffDays / 7) > 1 ? 's' : ''} ago`;
+    if (diffDays < 365) return `${Math.floor(diffDays / 30)} month${Math.floor(diffDays / 30) > 1 ? 's' : ''} ago`;
+    return reviewDate.toLocaleDateString();
+  };
 
-  const renderRoomType = (room: any) => (
-    <View style={styles.roomTypeCard} key={room.id}>
-      <Image source={{ uri: room.image }} style={styles.roomImage} />
-      <View style={styles.roomInfo}>
-        <Text style={styles.roomName}>{room.name}</Text>
-        <View style={styles.roomMeta}>
-          <Text style={styles.roomGuests}>👥 {room.guests} Guests</Text>
-          <Text style={styles.roomArea}>📍 {room.area}</Text>
-        </View>
-        <Text style={styles.roomAmenities}>
-          {Array.isArray(room.amenities) ? room.amenities.join(", ") : room.amenities}
-        </Text>
-        <View style={styles.roomFooter}>
-          <Text style={styles.roomPrice}>
-            ${room.price}
-            <Text style={styles.priceUnit}>/night</Text>
-          </Text>
-          <TouchableOpacity style={styles.selectButton}>
-            <Text style={styles.selectButtonText}>Select</Text>
-          </TouchableOpacity>
+  const renderReviewItem = (review: Review) => {
+    const user = typeof review.userId === 'object' ? review.userId : null;
+    const userName = user?.userName || 'Anonymous';
+    const userAvatar = user?.avatar || 'https://i.pravatar.cc/150?img=1';
+
+    return (
+      <View style={styles.reviewItem} key={review._id}>
+        <Image source={{ uri: userAvatar }} style={styles.reviewAvatar} />
+        <View style={styles.reviewContent}>
+          <View style={styles.reviewHeader}>
+            <Text style={styles.reviewAuthor}>{userName}</Text>
+            <Text style={styles.reviewDate}>{formatReviewDate(review.createdAt)}</Text>
+          </View>
+          <View style={styles.reviewRating}>
+            {[...Array(5)].map((_, i) => (
+              <Star
+                key={i}
+                size={12}
+                color={i < review.rating ? "#FFA500" : "#E5E7EB"}
+                fill={i < review.rating ? "#FFA500" : "none"}
+              />
+            ))}
+          </View>
+          <Text style={styles.reviewText}>{review.comment}</Text>
         </View>
       </View>
-    </View>
-  )
+    );
+  }
 
-  const renderFacilityCategory = (category: any) => (
-    <View key={category.category} style={styles.facilityCategory}>
-      <TouchableOpacity
-        style={styles.facilityHeader}
-        onPress={() => setExpandedFacility(expandedFacility === category.category ? null : category.category)}
+  const handleToggleRoomSelection = (roomName: string) => {
+    setSelectedRooms(prev => {
+      if (prev.includes(roomName)) {
+        return prev.filter(name => name !== roomName);
+      } else {
+        return [...prev, roomName];
+      }
+    });
+  };
+
+  const handleProceedToBooking = () => {
+    if (selectedRooms.length === 0) {
+      Alert.alert('Select Rooms', 'Please select at least one room type to continue');
+      return;
+    }
+    if (id) {
+      router.push({ 
+        pathname: "/booking/create", 
+        params: { hotelId: String(id), selectedRooms: selectedRooms.join(',') } 
+      });
+    }
+  };
+
+  const renderRoomType = (room: any, index: number) => {
+    // Nếu room có ảnh riêng thì dùng, không thì dùng ảnh khác nhau từ hotel photos
+    const roomImage = room.photos && room.photos.length > 0 
+      ? getImageUri(room.photos[0])
+      : (galleryImages[index % galleryImages.length] || galleryImages[0]);
+    const roomAmenities = room.amenities && room.amenities.length > 0
+      ? room.amenities.slice(0, 3).join(', ')
+      : 'Standard amenities';
+    
+    const isSelected = selectedRooms.includes(room.name);
+
+    return (
+      <TouchableOpacity 
+        style={[styles.roomTypeCard, isSelected && styles.roomTypeCardSelected]} 
+        key={room._id || room.name}
+        onPress={() => handleToggleRoomSelection(room.name)}
+        activeOpacity={0.7}
       >
-        <Text style={styles.facilityTitle}>{category.category}</Text>
-        <Text style={styles.expandIcon}>{expandedFacility === category.category ? "▼" : "▶"}</Text>
-      </TouchableOpacity>
-      {expandedFacility === category.category && (
-        <View style={styles.facilityItems}>
-          {category.items.map((item: string, index: number) => (
-            <Text key={index} style={styles.facilityItem}>
-              • {item}
+        <Image source={{ uri: roomImage }} style={styles.roomImage} />
+        <View style={styles.roomInfo}>
+          <View style={styles.roomHeader}>
+            <Text style={styles.roomName}>{room.name}</Text>
+            <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+              {isSelected && <Text style={styles.checkmark}>✓</Text>}
+            </View>
+          </View>
+          <View style={styles.roomMeta}>
+            <Text style={styles.roomGuests}>👥 {room.maxOccupancy} Guests</Text>
+            <Text style={styles.roomArea}>� {room.size} m²</Text>
+          </View>
+          <Text style={styles.roomAmenities}>{roomAmenities}</Text>
+          <View style={styles.roomFooter}>
+            <Text style={styles.roomPrice}>
+              ${room.price}
+              <Text style={styles.priceUnit}>/night</Text>
             </Text>
-          ))}
+            {isSelected && <Text style={styles.selectedBadge}>Selected ✓</Text>}
+          </View>
         </View>
-      )}
-    </View>
-  )
-
-  const galleryImages = [
-    hotel.image,
-    hotel.roomTypes[0]?.image || hotel.image,
-    hotel.roomTypes[1]?.image || hotel.image,
-    hotel.image,
-  ];
+      </TouchableOpacity>
+    );
+  }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       {/* Header Image Gallery */}
       <View style={styles.imageContainer}>
         <View style={styles.mainImageWrapper}>
-          <Image source={{ uri: hotel.image }} style={styles.headerImage} />
+          <Image source={{ uri: galleryImages[0] }} style={styles.headerImage} />
         </View>
         <View style={styles.thumbnailRow}>
           {galleryImages.slice(1, 4).map((img, index) => (
@@ -273,7 +334,7 @@ export default function HotelDetailScreen() {
         <TouchableOpacity style={styles.shareButton}>
           <Share2 size={20} color="white" />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.favoriteButtonHeader} onPress={() => setIsFavorite(!isFavorite)}>
+        <TouchableOpacity style={styles.favoriteButtonHeader} onPress={handleToggleFavorite}>
           <Heart size={20} color={isFavorite ? "#FF6B6B" : "white"} fill={isFavorite ? "#FF6B6B" : "none"} />
         </TouchableOpacity>
       </View>
@@ -295,57 +356,89 @@ export default function HotelDetailScreen() {
         </View>
 
         {/* Property Facilities */}
-        <View style={styles.facilitiesSection}>
-          <View style={styles.facilitiesHeader}>
-            <Text style={styles.facilitiesTitle}>Property Facilities</Text>
-            <TouchableOpacity>
-              <Text style={styles.seeAllLink}>See all</Text>
-            </TouchableOpacity>
+        {hotel.amenities && hotel.amenities.length > 0 && (
+          <View style={styles.facilitiesSection}>
+            <View style={styles.facilitiesHeader}>
+              <Text style={styles.facilitiesTitle}>Property Facilities</Text>
+            </View>
+            <View style={styles.facilitiesGrid}>
+              {hotel.amenities.slice(0, 5).map((amenity, index) => {
+                const getEmoji = (name: string) => {
+                  const lower = name.toLowerCase();
+                  if (lower.includes('wifi') || lower.includes('internet')) return '📶';
+                  if (lower.includes('pool') || lower.includes('swimming')) return '🏊';
+                  if (lower.includes('beach')) return '🏖️';
+                  if (lower.includes('ac') || lower.includes('air')) return '❄️';
+                  if (lower.includes('gym') || lower.includes('fitness')) return '�';
+                  if (lower.includes('parking')) return '🚗';
+                  if (lower.includes('restaurant')) return '�️';
+                  return '✓';
+                };
+
+                return (
+                  <View key={index} style={styles.facilityItem}>
+                    <View style={styles.facilityIcon}>
+                      <Text style={styles.facilityIconText}>{getEmoji(amenity)}</Text>
+                    </View>
+                    <Text style={styles.facilityName}>{amenity}</Text>
+                  </View>
+                );
+              })}
+            </View>
           </View>
-          <View style={styles.facilitiesGrid}>
-            {hotel.facilities.map((facility, index) => (
-              <View key={index} style={styles.facilityItem}>
-                <View style={styles.facilityIcon}>
-                  <Text style={styles.facilityIconText}>
-                    {facility === "Wifi" && "📶"}
-                    {facility === "Pool" && "🏊"}
-                    {facility === "Beach" && "🏖️"}
-                    {facility === "AC" && "❄️"}
-                    {facility === "Gym" && "💪"}
-                  </Text>
-                </View>
-                <Text style={styles.facilityName}>{facility}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
+        )}
 
         {/* Description */}
         <View style={styles.descriptionSection}>
           <Text style={styles.descriptionTitle}>Description</Text>
-          <Text style={styles.descriptionText}>{hotel.description}</Text>
+          <Text style={styles.descriptionText}>{hotel.description || 'No description available'}</Text>
         </View>
 
         {/* Price */}
-        <View style={styles.priceSection}>
-          <Text style={styles.priceLabel}>Price</Text>
-          <Text style={styles.priceValue}>
-            ${hotel.price}
-            <Text style={styles.priceUnitLarge}>/night</Text>
-          </Text>
-        </View>
+        {minPrice > 0 && (
+          <View style={styles.priceSection}>
+            <Text style={styles.priceLabel}>Starting Price</Text>
+            <Text style={styles.priceValue}>
+              ${minPrice}
+              <Text style={styles.priceUnitLarge}>/night</Text>
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Reviews Section with Rating Breakdown */}
       <View style={styles.section}>
         <View style={styles.reviewsHeader}>
           <Text style={styles.sectionTitle}>Reviews</Text>
-          <TouchableOpacity>
-            <Text style={styles.seeAllLink}>See all</Text>
+          <TouchableOpacity
+            style={styles.writeReviewButton}
+            onPress={() => router.push(`/review/create?hotelId=${id}` as any)}
+          >
+            <Star size={14} color="#17A2B8" />
+            <Text style={styles.writeReviewText}>Write Review</Text>
           </TouchableOpacity>
         </View>
-        {renderRatingBreakdown()}
-        {hotel.reviews_list.slice(0, 1).map(renderReviewItem)}
+        {reviews.length > 0 ? (
+          <>
+            <Text style={styles.reviewCount}>{reviews.length} review{reviews.length > 1 ? 's' : ''}</Text>
+            {renderRatingBreakdown()}
+            {reviews.slice(0, 3).map(renderReviewItem)}
+            {reviews.length > 3 && (
+              <TouchableOpacity
+                style={styles.viewAllReviewsButton}
+                onPress={() => router.push(`/hotel/${id}/reviews` as any)}
+              >
+                <Text style={styles.viewAllReviewsText}>View all {reviews.length} reviews</Text>
+              </TouchableOpacity>
+            )}
+          </>
+        ) : (
+          <View style={styles.noReviewsContainer}>
+            <Star size={48} color="#E5E7EB" />
+            <Text style={styles.noReviewsTitle}>No reviews yet</Text>
+            <Text style={styles.noReviewsText}>Be the first to review this hotel!</Text>
+          </View>
+        )}
       </View>
 
       {/* Location Section */}
@@ -355,36 +448,35 @@ export default function HotelDetailScreen() {
       </View>
 
       {/* Room Types Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Room Type</Text>
-        {hotel.roomTypes.map(renderRoomType)}
-      </View>
-
-      {/* All Facilities Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>All Property Facilities</Text>
-        {hotel.facilities_list.map(renderFacilityCategory)}
-      </View>
-
-      {/* Reviews Section */}
-      <View style={styles.section}>
-        <View style={styles.reviewsHeader}>
-          <Text style={styles.sectionTitle}>All Reviews</Text>
-          <Text style={styles.reviewCount}>{hotel.reviews} Reviews</Text>
+      {hotel.roomTypes && hotel.roomTypes.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Room Type</Text>
+          {hotel.roomTypes.map((room, index) => renderRoomType(room, index))}
         </View>
-        {hotel.reviews_list.map(renderReviewItem)}
-      </View>
+      )}
+
+      {/* All Amenities Section */}
+      {hotel.amenities && hotel.amenities.length > 5 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>All Property Facilities</Text>
+          <View style={styles.facilitiesListContainer}>
+            {hotel.amenities.map((amenity, index) => (
+              <Text key={index} style={styles.amenityListItem}>• {amenity}</Text>
+            ))}
+          </View>
+        </View>
+      )}
 
       {/* Book Button */}
       <TouchableOpacity
-        onPress={() => {
-          if (id) {
-            router.push({ pathname: "/booking/[id]/step1-dates", params: { id: String(id) } })
-          }
-        }}
-        style={styles.bookButton}
+        onPress={handleProceedToBooking}
+        style={[styles.bookButton, selectedRooms.length === 0 && { opacity: 0.6 }]}
       >
-        <Text style={styles.bookButtonText}>Book Now</Text>
+        <Text style={styles.bookButtonText}>
+          {selectedRooms.length > 0 
+            ? `Book ${selectedRooms.length} Room${selectedRooms.length > 1 ? 's' : ''} Now` 
+            : 'Select Rooms to Book'}
+        </Text>
       </TouchableOpacity>
     </ScrollView>
   )
@@ -745,14 +837,71 @@ const styles = StyleSheet.create({
     paddingLeft: 12,
     paddingBottom: 8,
   },
+  facilitiesListContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  amenityListItem: {
+    width: '50%',
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 6,
+  },
   reviewsHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 16,
+  },
+  writeReviewButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#17A2B8",
+    backgroundColor: "#E3F7FA",
+  },
+  writeReviewText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#17A2B8",
   },
   reviewCount: {
-    fontSize: 12,
+    fontSize: 13,
+    color: "#666",
+    marginBottom: 12,
+    fontWeight: "500",
+  },
+  viewAllReviewsButton: {
+    marginTop: 12,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#17A2B8",
+    backgroundColor: "#E3F7FA",
+    alignItems: "center",
+  },
+  viewAllReviewsText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#17A2B8",
+  },
+  noReviewsContainer: {
+    alignItems: "center",
+    paddingVertical: 40,
+  },
+  noReviewsTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1a1a1a",
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  noReviewsText: {
+    fontSize: 13,
     color: "#666",
   },
   reviewItem: {
@@ -806,5 +955,51 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
     fontWeight: "600",
+  },
+  roomTypeCardSelected: {
+    borderWidth: 2,
+    borderColor: "#17A2B8",
+    backgroundColor: "#F0F9FA",
+  },
+  roomHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderWidth: 2,
+    borderColor: "#CCC",
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  checkboxSelected: {
+    backgroundColor: "#17A2B8",
+    borderColor: "#17A2B8",
+  },
+  checkmark: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  selectedBadge: {
+    fontSize: 12,
+    color: "#17A2B8",
+    fontWeight: "600",
+  },
+    map: {
+    width: '100%',
+    height: 200,
+    borderRadius: 10,
+  },
+  customMarker: {
+    backgroundColor: 'white',
+    padding: 5,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: '#17A2B8',
   },
 })

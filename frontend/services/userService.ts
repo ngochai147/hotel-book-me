@@ -4,7 +4,8 @@ export interface User {
   _id: string;
   uid: string;
   email: string;
-  displayName : string;
+  userName: string;
+  displayName?: string;
   phone: string;
   avatar: string;
   favorites: any[];
