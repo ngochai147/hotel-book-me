@@ -186,6 +186,23 @@ export const deleteReview = async (req, res, next) => {
                 message: "Review not found",
             });
         }
+        // FIX: Kiểm tra review.userId có tồn tại không
+        if (!review.userId) {
+            console.log('Review userId is undefined or null');
+            return res.status(400).json({
+                success: false,
+                message: "Review data is corrupted - missing user information",
+            });
+        }
+
+        // FIX: Kiểm tra req.user._id có tồn tại không
+        if (!req.user || !req.user._id) {
+            console.log('Request user _id is undefined');
+            return res.status(401).json({
+                success: false,
+                message: "User authentication failed",
+            });
+        }
 
         // Check if user owns this review
         if (review.userId.toString() !== req.user._id.toString()) {
