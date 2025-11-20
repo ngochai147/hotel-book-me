@@ -7,9 +7,12 @@ import {
     updateBooking,
     cancelBooking,
 } from "../controllers/bookingController.js";
-import { verifyToken } from "../middlewares/verifyToken.js";
+import { verifyToken, verifyTokenOrGuest } from "../middlewares/verifyToken.js";
 
 const router = express.Router();
+
+// Admin routes (you can add admin middleware)
+router.get("/", verifyTokenOrGuest, getAllBookings); 
 
 // All routes are protected
 router.use(verifyToken);
@@ -21,7 +24,6 @@ router.post("/", createBooking);
 router.put("/:id", updateBooking);
 router.delete("/:id", cancelBooking);
 
-// Admin routes (you can add admin middleware)
-router.get("/", getAllBookings);
+
 
 export default router;
