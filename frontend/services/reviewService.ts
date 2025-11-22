@@ -120,6 +120,8 @@ export const createReview = async (
   comment: string
 ): Promise<ReviewResponse> => {
   try {
+    console.log('CreateReview API call:', { url: `${API_BASE_URL}/reviews`, hotelId, rating });
+    
     const response = await fetch(`${API_BASE_URL}/reviews`, {
       method: 'POST',
       headers: {
@@ -134,9 +136,13 @@ export const createReview = async (
     });
 
     const data = await response.json();
+    console.log('CreateReview API response:', { status: response.status, data });
 
     if (!response.ok) {
-      throw new Error(data.message || 'Failed to create review');
+      return {
+        success: false,
+        message: data.message || `Server error: ${response.status}`,
+      };
     }
 
     return data;
@@ -144,7 +150,7 @@ export const createReview = async (
     console.error('Create review error:', error);
     return {
       success: false,
-      message: error.message || 'Failed to create review',
+      message: error.message || 'Network error. Please check your connection.',
     };
   }
 };
@@ -159,17 +165,55 @@ export const deleteReview = async (
   reviewId: string
 ): Promise<ReviewResponse> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/reviews/${reviewId}`, {
+    // Validate inputs
+    if (!token || token.trim() === '') {
+      console.error('DeleteReview: No token provided');
+      return {
+        success: false,
+        message: 'Authentication required. Please login again.',
+      };
+    }
+
+    if (!reviewId || reviewId.trim() === '') {
+      console.error('DeleteReview: No reviewId provided');
+      return {
+        success: false,
+        message: 'Review ID is required',
+      };
+    }
+
+    const url = `${API_BASE_URL}/reviews/${reviewId}`;
+    console.log('DeleteReview API call:', { url, reviewId, tokenLength: token.length });
+    
+    const response = await fetch(url, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
       },
     });
 
-    const data = await response.json();
+    console.log('DeleteReview response status:', response.status);
+
+    let data;
+    try {
+    
+      data = await response.json();
+    } catch (parseError) {
+      console.error('Failed to parse response:', parseError);
+      return {
+        success: false,
+        message: 'Invalid server response',
+      };
+    }
+
+    console.log('DeleteReview API response:', { status: response.status, data });
 
     if (!response.ok) {
-      throw new Error(data.message || 'Failed to delete review');
+      return {
+        success: false,
+        message: data.message || `Server error: ${response.status}`,
+      };
     }
 
     return data;
@@ -177,7 +221,7 @@ export const deleteReview = async (
     console.error('Delete review error:', error);
     return {
       success: false,
-      message: error.message || 'Failed to delete review',
+      message: error.message || 'Network error. Please check your connection.',
     };
   }
 };

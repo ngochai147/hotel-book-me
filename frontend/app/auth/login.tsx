@@ -1,13 +1,16 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { ChevronLeft, Eye, EyeOff } from 'lucide-react-native';
 import { loginWithToken } from '../../services/authService';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../../config/firebase';
+import { useToast } from '../../contexts/ToastContext';
+import { Validator } from '../../utils/validation';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { showError, showSuccess } = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -15,17 +18,28 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
 
   const validateForm = () => {
-    if (!email.trim()) {
-      Alert.alert('Error', 'Please enter your email');
-      return false;
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      Alert.alert('Error', 'Please enter a valid email address');
-      return false;
-    }
-    if (!password) {
-      Alert.alert('Error', 'Please enter your password');
+    const validator = new Validator();
+    
+    const isValid = validator.validate({
+      email: email.trim(),
+      password
+    }, {
+      email: {
+        required: true,
+        email: true,
+        message: 'Please enter a valid email address'
+      },
+      password: {
+        required: true,
+        message: 'Please enter your password'
+      }
+    });
+
+    if (!isValid) {
+      const firstError = validator.getFirstError();
+      if (firstError) {
+        showError(firstError);
+      }
       return false;
     }
     return true;
@@ -49,14 +63,15 @@ export default function LoginScreen() {
 
       //neu thanh cong thi luu vao firebaseToken
       if (response.success && response.data) {
-
+            showSuccess('Login successful!');
             router.replace('/tabs')
       } else {
-        Alert.alert('Error', response.message || 'Login failed');
+        showError(response.message || 'Login failed');
         setError(true);
       }
     } catch (error: any) {
       console.error('Login error:', error);
+      showError(error.message || 'An error occurred during login');
       setError(true);
     } finally {
       setLoading(false);
@@ -132,29 +147,13 @@ export default function LoginScreen() {
           )}
         </TouchableOpacity>
 
-        <View style={styles.divider}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>Or</Text>
-          <View style={styles.dividerLine} />
-        </View>
-
-        <View style={styles.socialButtons}>
-          <TouchableOpacity style={styles.socialButton}>
-            <Text style={styles.socialButtonText}>G</Text>
-            <Text style={styles.socialLabel}>Google</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.socialButton}>
-            <Text style={styles.socialButtonText}>f</Text>
-            <Text style={styles.socialLabel}>Facebook</Text>
-          </TouchableOpacity>
-        </View>
-
         <View style={styles.footer}>
           <Text style={styles.footerText}>Don't have an account? </Text>
           <TouchableOpacity onPress={() => router.push('/auth/register')}>
             <Text style={styles.footerLink}>Register</Text>
           </TouchableOpacity>
         </View>
+
       </View>
     </ScrollView>
   );
@@ -163,16 +162,17 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'white',
+    backgroundColor: '#F5F8FA',
   },
   contentContainer: {
     padding: 20,
+    paddingBottom: 40,
   },
   inputError: {
-    borderColor: '#ff0000',
+    borderColor: '#FF6B6B',
   },
   errorText: {
-    color: '#ff0000',
+    color: '#FF6B6B',
     fontSize: 12,
     marginTop: 4,
   },
@@ -181,32 +181,47 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: 'center',
     marginBottom: 20,
+    borderRadius: 12,
+    backgroundColor: 'white',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
   },
   header: {
-    marginBottom: 30,
+    marginBottom: 40,
+    alignItems: 'center',
   },
   logo: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#17A2B8',
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+    backgroundColor: '#07A3B2',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 24,
+    shadowColor: '#07A3B2',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 8,
   },
   logoText: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    fontSize: 36,
+    fontWeight: '800',
     color: 'white',
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#1A1A1A',
     marginBottom: 8,
+    letterSpacing: -1,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#666',
   },
   form: {
@@ -216,110 +231,143 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1a1a1a',
-    marginBottom: 8,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 10,
   },
   input: {
-    height: 50,
+    height: 56,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 25,
+    borderColor: 'rgba(0,0,0,0.08)',
+    borderRadius: 16,
     paddingHorizontal: 20,
-    fontSize: 14,
-    color: '#1a1a1a',
+    fontSize: 15,
+    color: '#1A1A1A',
+    backgroundColor: 'white',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
   },
   passwordContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 25,
-    height: 50,
+    borderColor: 'rgba(0,0,0,0.08)',
+    borderRadius: 16,
+    height: 56,
     paddingHorizontal: 20,
+    backgroundColor: 'white',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
   },
   passwordInput: {
     flex: 1,
-    fontSize: 14,
-    color: '#1a1a1a',
+    fontSize: 15,
+    color: '#1A1A1A',
   },
   eyeIcon: {
     padding: 5,
   },
   forgotPassword: {
     fontSize: 14,
-    color: '#17A2B8',
+    fontWeight: '600',
+    color: '#07A3B2',
     textAlign: 'right',
-    marginBottom: 20,
+    marginBottom: 24,
   },
   loginButton: {
     height: 56,
-    backgroundColor: '#17A2B8',
+    backgroundColor: '#07A3B2',
     borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 10,
+    shadowColor: '#07A3B2',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 5,
   },
   loginButtonDisabled: {
     backgroundColor: '#9CD4DC',
+    opacity: 0.6,
   },
   loginButtonText: {
     color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 30,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#e0e0e0',
-  },
-  dividerText: {
-    marginHorizontal: 16,
-    color: '#999',
-    fontSize: 14,
-  },
-  socialButtons: {
-    flexDirection: 'row',
-    gap: 16,
-    marginBottom: 30,
-  },
-  socialButton: {
-    flex: 1,
-    height: 50,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 25,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  socialButtonText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  socialLabel: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: -0.3,
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    marginVertical: 24,
   },
   footerText: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#666',
   },
   footerLink: {
-    fontSize: 14,
-    color: '#17A2B8',
-    fontWeight: '600',
+    fontSize: 15,
+    color: '#07A3B2',
+    fontWeight: '700',
+  },
+  featuresSection: {
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 24,
+    marginTop: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  featuresTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1A1A1A',
+    marginBottom: 20,
+    letterSpacing: -0.5,
+  },
+  featuresList: {
+    gap: 16,
+  },
+  featureItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  featureIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  featureIconText: {
+    fontSize: 24,
+  },
+  featureContent: {
+    flex: 1,
+  },
+  featureLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 4,
+    letterSpacing: -0.3,
+  },
+  featureDescription: {
+    fontSize: 13,
+    color: '#666',
+    lineHeight: 18,
   },
 });

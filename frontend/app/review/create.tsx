@@ -9,7 +9,6 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
-  Alert,
   Image,
 } from 'react-native';
 import { getHotelById, Hotel } from '../../services/hotelService';
@@ -17,10 +16,12 @@ import { createReview } from '../../services/reviewService';
 import { hasCompletedBookingAtHotel } from '../../services/bookingService';
 import { auth } from '../../config/firebase';
 import { getImageUri } from '../../utils/imageHelper';
+import { useToast } from '../../contexts/ToastContext';
 
 export default function CreateReviewScreen() {
   const router = useRouter();
   const { hotelId } = useLocalSearchParams();
+  const { showError, showSuccess, showWarning } = useToast();
   
   const [hotel, setHotel] = useState<Hotel | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,7 +40,7 @@ export default function CreateReviewScreen() {
       setLoading(true);
       const currentUser = auth.currentUser;
       if (!currentUser) {
-        Alert.alert('Login Required', 'Please login to write a review');
+        showWarning('Please login to write a review');
         router.replace('/auth/login');
         return;
       }
@@ -56,61 +57,69 @@ export default function CreateReviewScreen() {
       setCanReview(hasBooking);
 
       if (!hasBooking) {
-        Alert.alert(
-          'Review Not Allowed',
-          'You can only review hotels where you have a completed booking',
-          [{ text: 'OK', onPress: () => router.back() }]
-        );
+        showWarning('You can only review hotels where you have a completed booking');
+        setTimeout(() => router.back(), 2000);
       }
     } catch (error) {
       console.error('Load error:', error);
-      Alert.alert('Error', 'Failed to load hotel details');
+      showError('Failed to load hotel details');
     } finally {
       setLoading(false);
     }
   };
 
   const handleSubmit = async () => {
+    // Manual validation for better control
     if (rating === 0) {
-      Alert.alert('Rating Required', 'Please select a rating');
+      showError('Please select a rating (1-5 stars)');
       return;
     }
 
-    if (!comment.trim()) {
-      Alert.alert('Comment Required', 'Please write a comment');
+    if (rating < 1 || rating > 5) {
+      showError('Rating must be between 1 and 5 stars');
+      return;
+    }
+
+    const trimmedComment = comment.trim();
+    if (!trimmedComment) {
+      showError('Please write a comment');
+      return;
+    }
+
+    if (trimmedComment.length < 10) {
+      showError('Comment must be at least 10 characters');
       return;
     }
 
     try {
       setSubmitting(true);
       const currentUser = auth.currentUser;
-      if (!currentUser) return;
+      if (!currentUser) {
+        showError('Please login to submit review');
+        return;
+      }
 
       const token = await currentUser.getIdToken();
+      console.log('Submitting review:', { hotelId, rating, commentLength: trimmedComment.length });
+      
       const response = await createReview(
         token,
         hotelId as string,
         rating,
-        comment.trim()
+        trimmedComment
       );
 
+      console.log('Review response:', response);
+
       if (response.success) {
-        Alert.alert(
-          'Review Submitted! ⭐',
-          'Thank you for your feedback!',
-          [
-            {
-              text: 'OK',
-              onPress: () => router.back(),
-            },
-          ]
-        );
+        showSuccess('Review submitted! ⭐ Thank you for your feedback!');
+        setTimeout(() => router.back(), 1500);
       } else {
-        Alert.alert('Error', response.message || 'Failed to submit review');
+        showError(response.message || 'Failed to submit review');
       }
     } catch (error: any) {
       console.error('Submit review error:', error);
-      Alert.alert('Error', error.message || 'Failed to submit review');
+      showError(error.message || 'Failed to submit review. Please try again.');
     } finally {
       setSubmitting(false);
     }

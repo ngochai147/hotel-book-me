@@ -1,26 +1,61 @@
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ChevronLeft, Eye, EyeOff, Check, Lock } from 'lucide-react-native';
+import { ChevronLeft, Eye, EyeOff, Check, Lock, AlertCircle } from 'lucide-react-native';
+import { verifyPasswordResetCode, confirmPasswordReset } from '../../services/authService';
 
 export default function ResetPasswordScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const email = params.email as string;
-  const code = params.code as string;
+  const oobCode = params.oobCode as string; // Firebase reset code from email link
   
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [verifying, setVerifying] = useState(true);
+  const [codeValid, setCodeValid] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  // Verify reset code when component mounts
+  useEffect(() => {
+    const verifyCode = async () => {
+      if (!oobCode) {
+        setErrorMessage('Invalid reset link. Please request a new password reset.');
+        setVerifying(false);
+        return;
+      }
+
+      try {
+        const result = await verifyPasswordResetCode(oobCode);
+        
+        if (result.success && result.email) {
+          setEmail(result.email);
+          setCodeValid(true);
+        } else {
+          setErrorMessage(result.message || 'Invalid or expired reset code.');
+          setCodeValid(false);
+        }
+      } catch (error) {
+        console.error('Verify code error:', error);
+        setErrorMessage('Failed to verify reset code. Please try again.');
+        setCodeValid(false);
+      } finally {
+        setVerifying(false);
+      }
+    };
+
+    verifyCode();
+  }, [oobCode]);
 
   const validatePassword = (password: string) => {
     return password.length >= 6;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!password.trim()) {
       Alert.alert('Error', 'Please enter a new password');
       return;
@@ -38,16 +73,68 @@ export default function ResetPasswordScreen() {
 
     setLoading(true);
 
-    setTimeout(() => {
-      setLoading(false);
-      setIsSuccess(true);
+    try {
+      const result = await confirmPasswordReset(oobCode, password);
       
-      setTimeout(() => {
-        router.replace('/auth/login');
-      }, 2000);
-    }, 1000);
+      if (result.success) {
+        setIsSuccess(true);
+        
+        setTimeout(() => {
+          router.replace('/auth/login');
+        }, 3000);
+      } else {
+        Alert.alert('Error', result.message);
+      }
+    } catch (error: any) {
+      console.error('Reset password error:', error);
+      Alert.alert('Error', 'Failed to reset password. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // Loading state while verifying code
+  if (verifying) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#17A2B8" />
+          <Text style={styles.loadingText}>Verifying reset link...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  // Invalid or expired code
+  if (!codeValid) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.errorContainer}>
+          <View style={styles.errorIcon}>
+            <AlertCircle size={48} color="#FF6B6B" />
+          </View>
+          <Text style={styles.errorTitle}>Invalid Reset Link</Text>
+          <Text style={styles.errorSubtitle}>
+            {errorMessage || 'This password reset link is invalid or has expired. Please request a new one.'}
+          </Text>
+          <TouchableOpacity 
+            style={styles.submitButton} 
+            onPress={() => router.replace('/auth/forgot-password')}
+          >
+            <Text style={styles.submitButtonText}>Request New Link</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.secondaryButton} 
+            onPress={() => router.replace('/auth/login')}
+          >
+            <Text style={styles.secondaryButtonText}>Back to Login</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // Success state
   if (isSuccess) {
     return (
       <View style={styles.container}>
@@ -59,6 +146,7 @@ export default function ResetPasswordScreen() {
           <Text style={styles.successSubtitle}>
             Your password has been reset successfully. You can now login with your new password.
           </Text>
+          <Text style={styles.emailText}>Email: {email}</Text>
           <TouchableOpacity style={styles.submitButton} onPress={() => router.replace('/auth/login')}>
             <Text style={styles.submitButtonText}>Back to Login</Text>
           </TouchableOpacity>
@@ -67,9 +155,10 @@ export default function ResetPasswordScreen() {
     );
   }
 
+  // Reset password form
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+      <TouchableOpacity style={styles.backButton} onPress={() => router.replace('/auth/forgot-password')}>
         <ChevronLeft size={24} color="#1a1a1a" />
       </TouchableOpacity>
 
@@ -275,5 +364,60 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 40,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 20,
+    fontSize: 16,
+    color: '#666',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  errorIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#FFE5E5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  errorTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#FF6B6B',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  errorSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 30,
+  },
+  secondaryButton: {
+    marginTop: 15,
+    padding: 15,
+  },
+  secondaryButtonText: {
+    color: '#17A2B8',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  emailText: {
+    fontSize: 14,
+    color: '#17A2B8',
+    marginBottom: 20,
+    fontWeight: '600',
   },
 });

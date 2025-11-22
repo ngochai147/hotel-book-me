@@ -2,7 +2,6 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { ArrowLeft, Star, Trash2, MapPin, Calendar } from 'lucide-react-native';
 import { useState, useCallback } from 'react';
 import {
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,12 +14,17 @@ import { auth } from '../../config/firebase';
 import { getReviewsByUserId, deleteReview, Review, formatReviewDate } from '../../services/reviewService';
 import { getMe } from '../../services/authService';
 import { getImageUri } from '../../utils/imageHelper';
+import { useToast } from '../../contexts/ToastContext';
+import ConfirmModal from '../../components/ConfirmModal';
 
 export default function MyReviewsScreen() {
   const router = useRouter();
+  const { showError, showSuccess, showWarning } = useToast();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [reviewToDelete, setReviewToDelete] = useState<{ id: string; name: string } | null>(null);
 
   // Reload reviews when screen is focused
   useFocusEffect(
@@ -35,8 +39,8 @@ export default function MyReviewsScreen() {
       const currentUser = auth.currentUser;
       
       if (!currentUser) {
-        Alert.alert('Login Required', 'Please login to view your reviews');
-        router.replace('/auth/login');
+        showWarning('Please login to view your reviews');
+        setTimeout(() => router.replace('/auth/login'), 1500);
         return;
       }
 
@@ -50,51 +54,63 @@ export default function MyReviewsScreen() {
         if (response.success) {
           setReviews(response.data);
         } else {
-          Alert.alert('Error', response.message || 'Failed to load reviews');
+          showError(response.message || 'Failed to load reviews');
         }
       }
     } catch (error) {
       console.error('Load reviews error:', error);
-      Alert.alert('Error', 'Failed to load reviews');
+      showError('Failed to load reviews');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDeleteReview = (reviewId: string, hotelName: string) => {
-    Alert.alert(
-      'Delete Review',
-      `Are you sure you want to delete your review for ${hotelName}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setDeleting(reviewId);
-              const currentUser = auth.currentUser;
-              if (!currentUser) return;
+  const showDeleteConfirmation = (reviewId: string, hotelName: string) => {
+    setReviewToDelete({ id: reviewId, name: hotelName });
+    setDeleteModalVisible(true);
+  };
 
-              const token = await currentUser.getIdToken();
-              const response = await deleteReview(token, reviewId);
+  const handleDeleteReview = async () => {
+    if (!reviewToDelete) return;
+    
+    try {
+      setDeleting(reviewToDelete.id);
+      
+      // Validate reviewId
+      if (!reviewToDelete.id || reviewToDelete.id === 'undefined') {
+        showError('Đánh giá không hợp lệ');
+        setDeleting(null);
+        return;
+      }
 
-              if (response.success) {
-                setReviews(reviews.filter(r => r._id !== reviewId));
-                Alert.alert('Success', 'Review deleted successfully');
-              } else {
-                Alert.alert('Error', response.message || 'Failed to delete review');
-              }
-            } catch (error: any) {
-              console.error('Delete review error:', error);
-              Alert.alert('Error', error.message || 'Failed to delete review');
-            } finally {
-              setDeleting(null);
-            }
-          },
-        },
-      ]
-    );
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        showError('Vui lòng đăng nhập để xóa đánh giá');
+        setTimeout(() => router.replace('/auth/login'), 1500);
+        return;
+      }
+
+      // Force refresh token to ensure it's valid
+      const token = await currentUser.getIdToken(true);
+      console.log('Deleting review:', { reviewId: reviewToDelete.id, hasToken: !!token, tokenPreview: token?.substring(0, 20) + '...' });
+      
+      const response = await deleteReview(token, reviewToDelete.id);
+      console.log('Delete response:', response);
+
+      if (response.success) {
+        // Update state
+        setReviews(prevReviews => prevReviews.filter(r => r._id !== reviewToDelete.id));
+        showSuccess('Đã xóa đánh giá thành công');
+      } else {
+        showError(response.message || 'Không thể xóa đánh giá');
+      }
+    } catch (error: any) {
+      console.error('Delete review error:', error);
+      showError(error.message || 'Không thể xóa đánh giá. Vui lòng thử lại.');
+    } finally {
+      setDeleting(null);
+      setReviewToDelete(null);
+    }
   };
 
   const handleViewHotel = (hotelId: string) => {
@@ -201,9 +217,9 @@ export default function MyReviewsScreen() {
 
                 {/* Actions */}
                 <View style={styles.actions}>
-                  <TouchableOpacity
+                  <TouchableOpacity 
                     style={styles.deleteButton}
-                    onPress={() => handleDeleteReview(review._id, hotelName)}
+                    onPress={() => showDeleteConfirmation(review._id, hotelName)}
                     disabled={deleting === review._id}
                   >
                     {deleting === review._id ? (
@@ -221,6 +237,22 @@ export default function MyReviewsScreen() {
           })}
         </ScrollView>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        visible={deleteModalVisible}
+        title="Xóa đánh giá"
+        message={`Bạn có chắc chắn muốn xóa đánh giá của bạn về ${reviewToDelete?.name || 'khách sạn này'}?\n\nHành động này không thể hoàn tác.`}
+        confirmText="Xóa đánh giá"
+        cancelText="Quay lại"
+        confirmColor="#FF6B6B"
+        icon={<Trash2 size={48} color="#FF6B6B" />}
+        onConfirm={handleDeleteReview}
+        onCancel={() => {
+          setDeleteModalVisible(false);
+          setReviewToDelete(null);
+        }}
+      />
     </View>
   );
 }

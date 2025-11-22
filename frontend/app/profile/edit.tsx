@@ -1,14 +1,17 @@
 import { useRouter } from 'expo-router';
-import { Calendar, Camera, ChevronLeft, Mail, MapPin, Phone, User } from 'lucide-react-native';
+import { Calendar, Camera, ChevronLeft, Mail, MapPin, Phone, User, X } from 'lucide-react-native';
 import { useState, useEffect } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, ActivityIndicator, Image } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, ActivityIndicator, Image } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { auth } from '../../config/firebase';
 import { updateUser } from '../../services/userService';
 import { getMe } from '../../services/authService';
+import { useToast } from '../../contexts/ToastContext';
+import { Validator } from '../../utils/validation';
 
 export default function EditProfileScreen() {
   const router = useRouter();
+  const { showError, showSuccess, showWarning } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [userId, setUserId] = useState('');
@@ -29,8 +32,8 @@ export default function EditProfileScreen() {
       const currentUser = auth.currentUser;
       
       if (!currentUser) {
-        Alert.alert('Error', 'Please login to edit profile');
-        router.back();
+        showWarning('Please login to edit profile');
+        setTimeout(() => router.back(), 1500);
         return;
       }
 
@@ -46,13 +49,13 @@ export default function EditProfileScreen() {
         setPhone(response.data.phone || '');
         setAvatar(response.data.avatar || '');
       } else {
-        Alert.alert('Error', 'Failed to load profile data');
-        router.back();
+        showError('Failed to load profile data');
+        setTimeout(() => router.back(), 1500);
       }
     } catch (error) {
       console.error('Load user error:', error);
-      Alert.alert('Error', 'Failed to load profile data');
-      router.back();
+      showError('Failed to load profile data');
+      setTimeout(() => router.back(), 1500);
     } finally {
       setLoading(false);
     }
@@ -61,13 +64,29 @@ export default function EditProfileScreen() {
   const handleSave = async () => {
     try {
       // Validate input
-      if (!name.trim()) {
-        Alert.alert('Validation Error', 'Please enter your name');
-        return;
-      }
+      const validator = new Validator();
+      
+      const isValid = validator.validate({
+        name: name.trim(),
+        phone: phone.trim()
+      }, {
+        name: {
+          required: true,
+          minLength: 2,
+          message: 'Please enter your name (at least 2 characters)'
+        },
+        phone: {
+          required: true,
+          phone: true,
+          message: 'Please enter a valid phone number'
+        }
+      });
 
-      if (!phone.trim()) {
-        Alert.alert('Validation Error', 'Please enter your phone number');
+      if (!isValid) {
+        const firstError = validator.getFirstError();
+        if (firstError) {
+          showError(firstError);
+        }
         return;
       }
 
@@ -75,7 +94,7 @@ export default function EditProfileScreen() {
       const currentUser = auth.currentUser;
       
       if (!currentUser) {
-        Alert.alert('Error', 'Please login to save changes');
+        showWarning('Please login to save changes');
         return;
       }
 
@@ -93,17 +112,14 @@ export default function EditProfileScreen() {
       );
 
       if (response.success) {
-        Alert.alert(
-          'Success',
-          'Your profile has been updated successfully!',
-          [{ text: 'OK', onPress: () => router.back() }]
-        );
+        showSuccess('Profile updated successfully!');
+        setTimeout(() => router.back(), 1500);
       } else {
-        Alert.alert('Error', response.message || 'Failed to update profile');
+        showError(response.message || 'Failed to update profile');
       }
     } catch (error: any) {
       console.error('Save profile error:', error);
-      Alert.alert('Error', error.message || 'Failed to update profile');
+      showError(error.message || 'Failed to update profile');
     } finally {
       setSaving(false);
     }
@@ -112,7 +128,7 @@ export default function EditProfileScreen() {
   const requestPermission = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Sorry, we need camera roll permissions to change your profile photo.');
+      showWarning('Camera roll permissions needed to change photo');
       return false;
     }
     return true;
@@ -139,7 +155,7 @@ export default function EditProfileScreen() {
   const takePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Sorry, we need camera permissions to take a photo.');
+      showWarning('Camera permissions needed to take a photo');
       return;
     }
 
@@ -157,31 +173,13 @@ export default function EditProfileScreen() {
   };
 
   const removePhoto = () => {
-    Alert.alert(
-      'Remove Photo',
-      'Are you sure you want to remove your profile photo?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Remove', 
-          style: 'destructive',
-          onPress: () => setAvatar('')
-        }
-      ]
-    );
+    setAvatar('');
+    showSuccess('Profile photo removed');
   };
 
   const handleChangePhoto = () => {
-    Alert.alert(
-      'Change Profile Photo',
-      'Choose an option',
-      [
-        { text: 'Take Photo', onPress: takePhoto },
-        { text: 'Choose from Library', onPress: pickImageFromLibrary },
-        { text: 'Remove Photo', style: 'destructive', onPress: removePhoto },
-        { text: 'Cancel', style: 'cancel' }
-      ]
-    );
+    // Directly trigger image picker - most common action
+    pickImageFromLibrary();
   };
 
   if (loading) {
@@ -223,10 +221,18 @@ export default function EditProfileScreen() {
               </View>
             )}
           </TouchableOpacity>
-          <TouchableOpacity style={styles.changePhotoButton} onPress={handleChangePhoto}>
-            <Camera size={16} color="#17A2B8" />
-            <Text style={styles.changePhotoText}>Change Photo</Text>
-          </TouchableOpacity>
+          <View style={styles.photoButtons}>
+            <TouchableOpacity style={styles.changePhotoButton} onPress={handleChangePhoto}>
+              <Camera size={16} color="#17A2B8" />
+              <Text style={styles.changePhotoText}>Change Photo</Text>
+            </TouchableOpacity>
+            {avatar && (
+              <TouchableOpacity style={styles.removePhotoButton} onPress={removePhoto}>
+                <X size={16} color="#FF3B30" />
+                <Text style={styles.removePhotoText}>Remove</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         <View style={styles.form}>
@@ -355,6 +361,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: 'white',
   },
+  photoButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
   changePhotoButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -368,6 +378,21 @@ const styles = StyleSheet.create({
   changePhotoText: {
     fontSize: 14,
     color: '#17A2B8',
+    fontWeight: '600',
+  },
+  removePhotoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#FF3B30',
+  },
+  removePhotoText: {
+    fontSize: 14,
+    color: '#FF3B30',
     fontWeight: '600',
   },
   form: {

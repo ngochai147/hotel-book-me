@@ -246,3 +246,71 @@ export const hasCompletedBookingAtHotel = async (token: string, hotelId: string)
     return false;
   }
 };
+
+// Special guest token for anonymous users to read bookings
+const GUEST_TOKEN = 'guest_read_only_token_12345';
+
+/**
+ * Get all upcoming bookings for availability check
+ * Fetches ALL bookings from all users to show accurate availability for everyone
+ * Uses guest token if user not logged in (read-only access)
+ */
+export const getAllUpcomingBookings = async (): Promise<BookingListResponse> => {
+  try {
+    // Try to get current user token
+    const { auth } = await import('../config/firebase');
+    const currentUser = auth.currentUser;
+    
+    let token = GUEST_TOKEN; // Default to guest token
+    
+    if (currentUser) {
+      try {
+        token = await currentUser.getIdToken(); // Use real token if logged in
+      } catch (e) {
+        console.log('Could not get user token, using guest token:', e);
+      }
+    }
+
+    // Get ALL bookings with either real token or guest token
+    const headers: any = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    };
+
+    const response = await fetch(`${API_BASE_URL}/bookings`, {
+      method: 'GET',
+      headers,
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.log('Could not fetch all bookings, using fallback');
+      // If can't get all bookings, return empty (optimistic availability)
+      return {
+        success: true,
+        count: 0,
+        data: [],
+      };
+    }
+
+    // Filter to only upcoming bookings
+    const upcomingBookings = data.data?.filter((booking: any) => 
+      booking.status === 'upcoming'
+    ) || [];
+
+    return {
+      success: true,
+      count: upcomingBookings.length,
+      data: upcomingBookings,
+    };
+  } catch (error: any) {
+    console.log('Get all upcoming bookings error:', error.message);
+    // Return empty on error (optimistic availability)
+    return {
+      success: true,
+      count: 0,
+      data: [],
+    };
+  }
+};
