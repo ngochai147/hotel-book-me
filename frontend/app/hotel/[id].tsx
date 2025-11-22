@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { ChevronLeft, Heart, MapPin, Share2, Star } from "lucide-react-native"
 import { useState, useEffect } from "react"
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator, Alert } from "react-native"
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native"
 import { getHotelById, Hotel } from "../../services/hotelService"
 import { getReviewsByHotelId, Review } from "../../services/reviewService"
 import { toggleFavorite, getUserFavorites } from "../../services/userService"
@@ -9,17 +9,38 @@ import { getMe } from "../../services/authService"
 import { auth } from "../../config/firebase"
 import { getImageUri } from "../../utils/imageHelper"
 import MapView, { Marker } from 'react-native-maps';
+import { useToast } from "../../contexts/ToastContext";
+import { getAllUpcomingBookings, Booking } from "../../services/bookingService";
 
 export default function HotelDetailScreen() {
   const router = useRouter()
-  const { id } = useLocalSearchParams()
+  const { id, fromBooking, checkIn, checkOut, guests } = useLocalSearchParams()
+  const { showError, showWarning } = useToast()
   const [hotel, setHotel] = useState<Hotel | null>(null)
   const [reviews, setReviews] = useState<Review[]>([])
   const [isFavorite, setIsFavorite] = useState(false)
   const [expandedFacility, setExpandedFacility] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [userId, setUserId] = useState<string>('')
-  const [selectedRooms, setSelectedRooms] = useState<string[]>([]) // Array of room type names
+  const [selectedRooms, setSelectedRooms] = useState<string[]>([])
+  const [upcomingBookings, setUpcomingBookings] = useState<Booking[]>([])
+  const [roomsAvailability, setRoomsAvailability] = useState<Map<string, { available: boolean; bookedCount: number }>>(new Map()) // Array of room type names
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0)
+  
+  // Booking params from chat or search page date picker
+  const hasBookingParams = checkIn && checkOut;
+  
+  // Debug log
+  useEffect(() => {
+    console.log('Hotel Detail - Booking params:', { 
+      fromBooking, 
+      checkIn, 
+      checkOut, 
+      guests,
+      hasBookingParams,
+      roomsAvailabilitySize: roomsAvailability.size
+    });
+  }, [checkIn, checkOut, roomsAvailability]);
 
   useEffect(() => {
     if (id) {
@@ -32,12 +53,22 @@ export default function HotelDetailScreen() {
     try {
       setLoading(true);
       
+      // Load upcoming bookings for availability check
+      const bookingsResponse = await getAllUpcomingBookings();
+      if (bookingsResponse.success && bookingsResponse.data) {
+        setUpcomingBookings(bookingsResponse.data);
+      }
+
       // Load hotel details
       const hotelResponse = await getHotelById(String(id));
       if (hotelResponse.success && hotelResponse.data) {
         setHotel(hotelResponse.data);
+        // Check room availability after loading hotel
+        if (checkIn && checkOut && hotelResponse.data.roomTypes) {
+          checkRoomAvailability(hotelResponse.data.roomTypes, String(checkIn), String(checkOut), bookingsResponse.data || []);
+        }
       } else {
-        Alert.alert('Error', 'Failed to load hotel details');
+        showError('Failed to load hotel details');
         return;
       }
 
@@ -49,10 +80,58 @@ export default function HotelDetailScreen() {
       
     } catch (error) {
       console.error('Load hotel data error:', error);
-      Alert.alert('Error', 'Failed to load hotel details');
+      showError('Failed to load hotel details');
     } finally {
       setLoading(false);
     }
+  };
+
+  // Check date overlap
+  const checkDateOverlap = (
+    checkIn1: string | Date,
+    checkOut1: string | Date,
+    checkIn2: string | Date,
+    checkOut2: string | Date
+  ): boolean => {
+    const start1 = new Date(checkIn1).getTime();
+    const end1 = new Date(checkOut1).getTime();
+    const start2 = new Date(checkIn2).getTime();
+    const end2 = new Date(checkOut2).getTime();
+    return start1 < end2 && start2 < end1;
+  };
+
+  // Check room availability for this hotel
+  const checkRoomAvailability = (roomTypes: any[], checkInDate: string, checkOutDate: string, bookings: Booking[]) => {
+    if (!checkInDate || !checkOutDate) return;
+
+    const availMap = new Map<string, { available: boolean; bookedCount: number }>();
+
+    roomTypes.forEach(room => {
+      // Count overlapping bookings for THIS SPECIFIC ROOM TYPE
+      const overlappingBookings = bookings.filter(booking => {
+        const bookingHotelId = typeof booking.hotelId === 'string' 
+          ? booking.hotelId 
+          : booking.hotelId._id;
+        
+        // Check if this booking is for this hotel AND overlaps with selected dates
+        const isHotelMatch = bookingHotelId === id;
+        const isDateOverlap = checkDateOverlap(checkInDate, checkOutDate, booking.checkIn, booking.checkOut);
+        
+        // Check if booking includes this specific room type
+        const hasRoomType = booking.roomType && booking.roomType.includes(room.name);
+        
+        return isHotelMatch && isDateOverlap && hasRoomType;
+      });
+
+      // Backend logic: Only 1 booking allowed per room type at a time
+      // If there's ANY overlapping booking for this room type, it's unavailable
+      const bookedCount = overlappingBookings.length;
+      const available = bookedCount === 0;
+
+      availMap.set(room.name, { available, bookedCount });
+    });
+
+    setRoomsAvailability(availMap);
   };
 
   const checkFavoriteStatus = async () => {
@@ -87,13 +166,13 @@ export default function HotelDetailScreen() {
     try {
       const currentUser = auth.currentUser;
       if (!currentUser) {
-        Alert.alert('Login Required', 'Please login to add favorites');
-        router.replace('/auth/login');
+        showWarning('Please login to save favorites');
+        setTimeout(() => router.push('/auth/login'), 1500);
         return;
       }
 
       if (!userId) {
-        Alert.alert('Error', 'User ID not found. Please refresh the page.');
+        showError('User ID not found. Please refresh the page.');
         return;
       }
 
@@ -103,11 +182,11 @@ export default function HotelDetailScreen() {
       if (response.success) {
         setIsFavorite(!isFavorite);
       } else {
-        Alert.alert('Error', response.message || 'Failed to update favorite');
+        showError(response.message || 'Failed to update favorite');
       }
     } catch (error) {
       console.error('Toggle favorite error:', error);
-      Alert.alert('Error', 'Failed to update favorite');
+      showError('Failed to update favorite');
     }
   };
 
@@ -201,7 +280,7 @@ export default function HotelDetailScreen() {
       </MapView>
       
       <View style={styles.locationInfo}>
-        <MapPin size={16} color="#17A2B8" />
+        <MapPin size={16} color="#17A2B8" style={{marginTop:10}} />
         <Text style={styles.locationAddress}>{hotel.address}</Text>
       </View>
     </View>
@@ -262,34 +341,55 @@ export default function HotelDetailScreen() {
 
   const handleProceedToBooking = () => {
     if (selectedRooms.length === 0) {
-      Alert.alert('Select Rooms', 'Please select at least one room type to continue');
+      showWarning('Please select at least one room type to continue');
       return;
     }
     if (id) {
+      // If coming from booking flow, pass the params along
+      const params: any = { 
+        hotelId: String(id), 
+        selectedRooms: selectedRooms.join(',') 
+      };
+      
+      // Add booking params if they exist (from chatbot)
+      if (hasBookingParams) {
+        params.checkIn = checkIn;
+        params.checkOut = checkOut;
+        params.guests = guests;
+      }
+      
       router.push({ 
         pathname: "/booking/create", 
-        params: { hotelId: String(id), selectedRooms: selectedRooms.join(',') } 
+        params 
       });
     }
   };
 
   const renderRoomType = (room: any, index: number) => {
-    // Nếu room có ảnh riêng thì dùng, không thì dùng ảnh khác nhau từ hotel photos
-    const roomImage = room.photos && room.photos.length > 0 
-      ? getImageUri(room.photos[0])
+    // Nếu room có ảnh riêng thì dùng, không thì dùng ảnh từ hotel photos
+    const roomImage = room.images && room.images.length > 0 
+      ? getImageUri(room.images[0])
       : (galleryImages[index % galleryImages.length] || galleryImages[0]);
     const roomAmenities = room.amenities && room.amenities.length > 0
       ? room.amenities.slice(0, 3).join(', ')
       : 'Standard amenities';
     
     const isSelected = selectedRooms.includes(room.name);
+    const availabilityInfo = roomsAvailability.get(room.name);
+    const isAvailable = availabilityInfo?.available ?? true;
+    const bookedCount = availabilityInfo?.bookedCount ?? 0;
 
     return (
       <TouchableOpacity 
-        style={[styles.roomTypeCard, isSelected && styles.roomTypeCardSelected]} 
-        key={room._id || room.name}
-        onPress={() => handleToggleRoomSelection(room.name)}
-        activeOpacity={0.7}
+        style={[
+          styles.roomTypeCard, 
+          isSelected && styles.roomTypeCardSelected,
+          !isAvailable && styles.roomTypeCardDisabled
+        ]} 
+        key={room._id}
+        onPress={() => isAvailable && handleToggleRoomSelection(room.name)}
+        activeOpacity={isAvailable ? 0.7 : 1}
+        disabled={!isAvailable}
       >
         <Image source={{ uri: roomImage }} style={styles.roomImage} />
         <View style={styles.roomInfo}>
@@ -301,13 +401,27 @@ export default function HotelDetailScreen() {
           </View>
           <View style={styles.roomMeta}>
             <Text style={styles.roomGuests}>👥 {room.maxOccupancy} Guests</Text>
-            <Text style={styles.roomArea}>� {room.size} m²</Text>
+            <Text style={styles.roomArea}>📐 {room.size}</Text>
           </View>
           <Text style={styles.roomAmenities}>{roomAmenities}</Text>
+          {/* Availability Status - Show when dates are provided */}
+          {(checkIn && checkOut) && (
+            <View style={styles.availabilityContainer}>
+              {isAvailable ? (
+                <View style={styles.availableBadge}>
+                  <Text style={styles.availableText}>✓ Phòng còn trống</Text>
+                </View>
+              ) : (
+                <View style={styles.soldOutBadge}>
+                  <Text style={styles.soldOutText}>✖ Phòng đã được đẵt</Text>
+                </View>
+              )}
+            </View>
+          )}
           <View style={styles.roomFooter}>
             <Text style={styles.roomPrice}>
-              ${room.price}
-              <Text style={styles.priceUnit}>/night</Text>
+              {room.price.toLocaleString('vi-VN')} VND
+              <Text style={styles.priceUnit}>/đêm</Text>
             </Text>
             {isSelected && <Text style={styles.selectedBadge}>Selected ✓</Text>}
           </View>
@@ -321,11 +435,17 @@ export default function HotelDetailScreen() {
       {/* Header Image Gallery */}
       <View style={styles.imageContainer}>
         <View style={styles.mainImageWrapper}>
-          <Image source={{ uri: galleryImages[0] }} style={styles.headerImage} />
+          <Image source={{ uri: galleryImages[selectedImageIndex] }} style={styles.headerImage} />
         </View>
         <View style={styles.thumbnailRow}>
-          {galleryImages.slice(1, 4).map((img, index) => (
-            <Image key={index} source={{ uri: img }} style={styles.thumbnailImage} />
+          {galleryImages.slice(0, 4).map((img, index) => (
+            <TouchableOpacity 
+              key={`thumb-${index}`} 
+              onPress={() => setSelectedImageIndex(index)}
+              style={[styles.thumbnailWrapper, selectedImageIndex === index && styles.thumbnailSelected]}
+            >
+              <Image source={{ uri: img }} style={styles.thumbnailImage} />
+            </TouchableOpacity>
           ))}
         </View>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
@@ -365,13 +485,13 @@ export default function HotelDetailScreen() {
               {hotel.amenities.slice(0, 5).map((amenity, index) => {
                 const getEmoji = (name: string) => {
                   const lower = name.toLowerCase();
-                  if (lower.includes('wifi') || lower.includes('internet')) return '📶';
+                  if (lower.includes('free wifi') || lower.includes('room service')) return '📶';
                   if (lower.includes('pool') || lower.includes('swimming')) return '🏊';
                   if (lower.includes('beach')) return '🏖️';
-                  if (lower.includes('ac') || lower.includes('air')) return '❄️';
-                  if (lower.includes('gym') || lower.includes('fitness')) return '�';
+                  if (lower.includes('ac') || lower.includes('air conditioning')) return '❄️';
+                  if (lower.includes('gym') || lower.includes('fitness')) return '🏋️';
                   if (lower.includes('parking')) return '🚗';
-                  if (lower.includes('restaurant')) return '�️';
+                  if (lower.includes('restaurant')) return '🍽️';
                   return '✓';
                 };
 
@@ -399,8 +519,8 @@ export default function HotelDetailScreen() {
           <View style={styles.priceSection}>
             <Text style={styles.priceLabel}>Starting Price</Text>
             <Text style={styles.priceValue}>
-              ${minPrice}
-              <Text style={styles.priceUnitLarge}>/night</Text>
+              {minPrice.toLocaleString('vi-VN')} VND
+              <Text style={styles.priceUnitLarge}>/đêm</Text>
             </Text>
           </View>
         )}
@@ -451,7 +571,11 @@ export default function HotelDetailScreen() {
       {hotel.roomTypes && hotel.roomTypes.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Room Type</Text>
-          {hotel.roomTypes.map((room, index) => renderRoomType(room, index))}
+          {hotel.roomTypes.map((room, index) => (
+            <View key={`room-${room._id || index}`}>
+              {renderRoomType(room, index)}
+            </View>
+          ))}
         </View>
       )}
 
@@ -510,10 +634,20 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 8,
   },
-  thumbnailImage: {
+  thumbnailWrapper: {
     flex: 1,
-    height: 80,
     borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  thumbnailSelected: {
+    borderColor: '#17A2B8',
+  },
+  thumbnailImage: {
+    width: '100%',
+    height: 80,
+    borderRadius: 6,
   },
   backButton: {
     position: "absolute",
@@ -740,11 +874,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 8,
+    
   },
   locationAddress: {
     fontSize: 12,
     color: "#666",
     flex: 1,
+    marginTop: 10,
     lineHeight: 18,
   },
   roomTypeCard: {
@@ -754,6 +890,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: "#E5E7EB",
+  },
+  roomTypeCardDisabled: {
+    opacity: 0.5,
+    backgroundColor: "#F0F0F0",
   },
   roomImage: {
     width: "100%",
@@ -785,6 +925,40 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#666",
     marginBottom: 8,
+  },
+  availabilityContainer: {
+    marginBottom: 8,
+  },
+  availableBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: 'rgba(76, 217, 100, 0.1)',
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  availableText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4CAF50',
+  },
+  availableSubtext: {
+    fontSize: 11,
+    color: '#666',
+  },
+  soldOutBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: 'rgba(255, 59, 48, 0.1)',
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  soldOutText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FF3B30',
   },
   roomFooter: {
     flexDirection: "row",

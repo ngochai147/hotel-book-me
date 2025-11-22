@@ -8,17 +8,18 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Image,
 } from 'react-native';
 import { getBookingById, cancelBooking, Booking as BookingType } from '../../services/bookingService';
 import { getHotelById, Hotel } from '../../services/hotelService';
 import { auth } from '../../config/firebase';
 import { getImageUri } from '../../utils/imageHelper';
+import { useToast } from '../../contexts/ToastContext';
 
 export default function BookingDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
+  const { showError, showSuccess, showWarning, showInfo } = useToast();
   const [booking, setBooking] = useState<BookingType | null>(null);
   const [hotel, setHotel] = useState<Hotel | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,8 +36,8 @@ export default function BookingDetailScreen() {
       setLoading(true);
       const currentUser = auth.currentUser;
       if (!currentUser) {
-        Alert.alert('Login Required', 'Please login to view booking details');
-        router.replace('/auth/login');
+        showWarning('Please login to view booking details');
+        setTimeout(() => router.replace('/auth/login'), 1500);
         return;
       }
 
@@ -58,72 +59,52 @@ export default function BookingDetailScreen() {
           }
         }
       } else {
-        Alert.alert('Error', 'Failed to load booking details');
-        router.back();
+        showError('Failed to load booking details');
+        setTimeout(() => router.back(), 1500);
       }
     } catch (error) {
       console.error('Load booking error:', error);
-      Alert.alert('Error', 'Failed to load booking details');
-      router.back();
+      showError('Failed to load booking details');
+      setTimeout(() => router.back(), 1500);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCancelBooking = () => {
+  const handleCancelBooking = async () => {
     if (!booking) return;
 
     const hotelNameForAlert = hotel?.name || 'this hotel';
 
-    Alert.alert(
-      'Cancel Booking',
-      `Are you sure you want to cancel your booking at ${hotelNameForAlert}?\n\nBooking Number: ${booking.bookingNumber}`,
-      [
-        { text: 'No', style: 'cancel' },
-        {
-          text: 'Yes, Cancel',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setCancelling(true);
-              const currentUser = auth.currentUser;
-              if (!currentUser) return;
+    // Direct cancellation with toast
+    try {
+      setCancelling(true);
+      const currentUser = auth.currentUser;
+      if (!currentUser) return;
 
-              const token = await currentUser.getIdToken();
-              const response = await cancelBooking(token, booking._id);
-              
-              if (response.success) {
-                Alert.alert(
-                  'Booking Cancelled',
-                  'Your booking has been cancelled successfully.',
-                  [
-                    {
-                      text: 'OK',
-                      onPress: () => router.push('/tabs/booking')
-                    }
-                  ]
-                );
-              } else {
-                Alert.alert('Error', response.message || 'Failed to cancel booking');
-              }
-            } catch (error) {
-              console.error('Cancel booking error:', error);
-              Alert.alert('Error', 'Failed to cancel booking');
-            } finally {
-              setCancelling(false);
-            }
-          }
-        }
-      ]
-    );
+      const token = await currentUser.getIdToken();
+      const response = await cancelBooking(token, booking._id);
+      
+      if (response.success) {
+        showSuccess(`Booking at ${hotelNameForAlert} cancelled successfully`);
+        setTimeout(() => router.push('/tabs/booking'), 1500);
+      } else {
+        showError(response.message || 'Failed to cancel booking');
+      }
+    } catch (error) {
+      console.error('Cancel booking error:', error);
+      showError('Failed to cancel booking');
+    } finally {
+      setCancelling(false);
+    }
   };
 
   const handleShare = () => {
-    Alert.alert('Share', 'Share booking feature coming soon!');
+    showInfo('Share booking feature coming soon!');
   };
 
   const handleDownload = () => {
-    Alert.alert('Download', 'Download booking receipt feature coming soon!');
+    showInfo('Download booking receipt feature coming soon!');
   };
 
   const formatDate = (date: Date | string) => {
@@ -342,14 +323,14 @@ export default function BookingDetailScreen() {
           <View style={styles.priceCard}>
             <View style={styles.priceRow}>
               <Text style={styles.priceLabel}>
-                {booking.roomType?.length || 1} room{(booking.roomType?.length || 1) > 1 ? 's' : ''} × {nights} night{nights > 1 ? 's' : ''}
+                {booking.roomType?.length || 1} phòng × {nights} đêm
               </Text>
-              <Text style={styles.priceValue}>${booking.totalPrice.toFixed(2)}</Text>
+              <Text style={styles.priceValue}>{booking.totalPrice.toLocaleString('vi-VN')} VND</Text>
             </View>
             <View style={styles.priceDivider} />
             <View style={styles.priceRow}>
-              <Text style={styles.totalLabel}>Total Amount</Text>
-              <Text style={styles.totalValue}>${booking.totalPrice.toFixed(2)}</Text>
+              <Text style={styles.totalLabel}>Tổng tiền</Text>
+              <Text style={styles.totalValue}>{booking.totalPrice.toLocaleString('vi-VN')} VND</Text>
             </View>
           </View>
         </View>
@@ -383,7 +364,7 @@ export default function BookingDetailScreen() {
               if (hotel?._id) {
                 router.push(`/hotel/${hotel._id}`);
               } else {
-                Alert.alert('Error', 'Hotel information not available');
+                showError('Hotel information not available');
               }
             }}
           >
@@ -411,7 +392,7 @@ export default function BookingDetailScreen() {
               if (hotel?._id) {
                 router.push(`/hotel/${hotel._id}`);
               } else {
-                Alert.alert('Error', 'Hotel information not available');
+                showError('Hotel information not available');
               }
             }}
           >

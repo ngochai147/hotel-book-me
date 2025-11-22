@@ -6,11 +6,16 @@ import {
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
 
 const { height } = Dimensions.get('window');
+
+const MIN_PRICE = 100000; 
+const MAX_PRICE = 10000000; 
+const PRICE_STEP = 100000;
 
 interface FilterModalProps {
   visible: boolean;
@@ -19,8 +24,10 @@ interface FilterModalProps {
 }
 
 export default function FilterModal({ visible, onClose, onApply }: FilterModalProps) {
-  const [priceRange, setPriceRange] = useState([0, 20000000]);
+  const [priceRange, setPriceRange] = useState([MIN_PRICE, MAX_PRICE]);
   const [selectedRating, setSelectedRating] = useState<number | null>(null);
+  const [minPriceInput, setMinPriceInput] = useState(MIN_PRICE.toString());
+  const [maxPriceInput, setMaxPriceInput] = useState(MAX_PRICE.toString());
 
   const handleApply = () => {
     onApply({
@@ -31,8 +38,52 @@ export default function FilterModal({ visible, onClose, onApply }: FilterModalPr
   };
 
   const handleReset = () => {
-    setPriceRange([0, 20000000]);
+    setPriceRange([MIN_PRICE, MAX_PRICE]);
+    setMinPriceInput(MIN_PRICE.toString());
+    setMaxPriceInput(MAX_PRICE.toString());
     setSelectedRating(null);
+  };
+
+  const handleMinPriceChange = (text: string) => {
+    // Cho phép nhập và lưu text thô
+    setMinPriceInput(text);
+    // Chỉ cập nhật priceRange khi có số hợp lệ
+    const numericText = text.replace(/[^0-9]/g, '');
+    if (numericText) {
+      const value = parseInt(numericText);
+      const clampedValue = Math.max(MIN_PRICE, Math.min(priceRange[1], value));
+      setPriceRange([clampedValue, priceRange[1]]);
+    }
+  };
+
+  const handleMaxPriceChange = (text: string) => {
+    // Cho phép nhập và lưu text thô
+    setMaxPriceInput(text);
+    // Chỉ cập nhật priceRange khi có số hợp lệ
+    const numericText = text.replace(/[^0-9]/g, '');
+    if (numericText) {
+      const value = parseInt(numericText);
+      const clampedValue = Math.min(MAX_PRICE, Math.max(priceRange[0], value));
+      setPriceRange([priceRange[0], clampedValue]);
+    }
+  };
+
+  const handleMinPriceBlur = () => {
+    // Khi blur, format lại và đảm bảo giá trị hợp lệ
+    const numericText = minPriceInput.replace(/[^0-9]/g, '');
+    const value = parseInt(numericText) || MIN_PRICE;
+    const clampedValue = Math.max(MIN_PRICE, Math.min(priceRange[1], value));
+    setPriceRange([clampedValue, priceRange[1]]);
+    setMinPriceInput(clampedValue.toLocaleString('vi-VN'));
+  };
+
+  const handleMaxPriceBlur = () => {
+    // Khi blur, format lại và đảm bảo giá trị hợp lệ
+    const numericText = maxPriceInput.replace(/[^0-9]/g, '');
+    const value = parseInt(numericText) || MAX_PRICE;
+    const clampedValue = Math.min(MAX_PRICE, Math.max(priceRange[0], value));
+    setPriceRange([priceRange[0], clampedValue]);
+    setMaxPriceInput(clampedValue.toLocaleString('vi-VN'));
   };
 
   return (
@@ -54,9 +105,9 @@ export default function FilterModal({ visible, onClose, onApply }: FilterModalPr
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
             {/* Rating */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Rating (Stars)</Text>
+              <Text style={styles.sectionTitle}>Đánh giá tối thiểu</Text>
               <View style={styles.ratingGrid}>
-                {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rating) => (
+                {[0, 1, 2, 3, 4, 5].map((rating) => (
                   <TouchableOpacity
                     key={rating}
                     style={[
@@ -65,82 +116,117 @@ export default function FilterModal({ visible, onClose, onApply }: FilterModalPr
                     ]}
                     onPress={() => setSelectedRating(rating === selectedRating ? null : rating)}
                   >
-                    {rating > 0 && (
-                      <Star
-                        size={14}
-                        color={selectedRating === rating ? '#fff' : '#FFA500'}
-                        fill={selectedRating === rating ? '#fff' : '#FFA500'}
-                      />
-                    )}
+                    <View style={styles.starContainer}>
+                      {[...Array(rating > 0 ? rating : 0)].map((_, i) => (
+                        <Star
+                          key={i}
+                          size={12}
+                          color={selectedRating === rating ? '#fff' : '#FFD700'}
+                          fill={selectedRating === rating ? '#fff' : '#FFD700'}
+                        />
+                      ))}
+                    </View>
                     <Text
                       style={[
                         styles.ratingText,
                         selectedRating === rating && styles.ratingTextActive,
                       ]}
                     >
-                      {rating}
+                      {rating === 0 ? 'Tất cả' : `${rating}★`}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
-              <Text style={styles.ratingHint}>Select minimum rating (0 = show all)</Text>
+              <Text style={styles.ratingHint}>Chọn đánh giá tối thiểu (0 = hiển thị tất cả)</Text>
             </View>
 
             {/* Price Range */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Price Range (per night)</Text>
-              <View style={styles.priceRangeContainer}>
-                <View style={styles.priceBox}>
-                  <Text style={styles.priceBoxLabel}>Minimum</Text>
-                  <Text style={styles.priceBoxValue}>${priceRange[0]}</Text>
-                  <View style={styles.priceControls}>
-                    <TouchableOpacity
-                      style={styles.priceButton}
-                      onPress={() => {
-                        const newMin = Math.max(0, priceRange[0] - 10);
-                        setPriceRange([newMin, priceRange[1]]);
-                      }}
-                    >
-                      <Text style={styles.priceButtonText}>-</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.priceButton}
-                      onPress={() => {
-                        const newMin = Math.min(priceRange[1] - 10, priceRange[0] + 10);
-                        setPriceRange([newMin, priceRange[1]]);
-                      }}
-                    >
-                      <Text style={styles.priceButtonText}>+</Text>
-                    </TouchableOpacity>
+              <Text style={styles.sectionTitle}>Khoảng giá (mỗi đêm)</Text>
+              
+              {/* Min Price */}
+              <View style={styles.priceInputGroup}>
+                <Text style={styles.priceInputLabel}>Giá tối thiểu</Text>
+                <View style={styles.priceInputContainer}>
+                  <TouchableOpacity
+                    style={styles.priceButtonControl}
+                    onPress={() => {
+                      const newMin = Math.max(MIN_PRICE, priceRange[0] - PRICE_STEP);
+                      setPriceRange([newMin, priceRange[1]]);
+                      setMinPriceInput(newMin.toString());
+                    }}
+                  >
+                    <Text style={styles.priceButtonControlText}>−</Text>
+                  </TouchableOpacity>
+                  
+                  <View style={styles.priceInputWrapper}>
+                    <TextInput
+                      style={styles.priceInput}
+                      value={minPriceInput}
+                      onBlur={handleMinPriceBlur}
+                      onChangeText={handleMinPriceChange}
+                      keyboardType="numeric"
+                      placeholder={MIN_PRICE.toLocaleString('vi-VN')}
+                    />
+                    <Text style={styles.priceInputUnit}>VND</Text>
                   </View>
-                </View>
-                <View style={styles.priceSeparator} />
-                <View style={styles.priceBox}>
-                  <Text style={styles.priceBoxLabel}>Maximum</Text>
-                  <Text style={styles.priceBoxValue}>${priceRange[1]}</Text>
-                  <View style={styles.priceControls}>
-                    <TouchableOpacity
-                      style={styles.priceButton}
-                      onPress={() => {
-                        const newMax = Math.max(priceRange[0] + 10, priceRange[1] - 10);
-                        setPriceRange([priceRange[0], newMax]);
-                      }}
-                    >
-                      <Text style={styles.priceButtonText}>-</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.priceButton}
-                      onPress={() => {
-                        const newMax = Math.min(1000, priceRange[1] + 10);
-                        setPriceRange([priceRange[0], newMax]);
-                      }}
-                    >
-                      <Text style={styles.priceButtonText}>+</Text>
-                    </TouchableOpacity>
-                  </View>
+                  
+                  <TouchableOpacity
+                    style={styles.priceButtonControl}
+                    onPress={() => {
+                      const newMin = Math.min(priceRange[1] - PRICE_STEP, priceRange[0] + PRICE_STEP);
+                      setPriceRange([newMin, priceRange[1]]);
+                      setMinPriceInput(newMin.toString());
+                    }}
+                  >
+                    <Text style={styles.priceButtonControlText}>+</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
-              <Text style={styles.priceHint}>Use +/- buttons to adjust price range</Text>
+
+              {/* Max Price */}
+              <View style={styles.priceInputGroup}>
+                <Text style={styles.priceInputLabel}>Giá tối đa</Text>
+                <View style={styles.priceInputContainer}>
+                  <TouchableOpacity
+                    style={styles.priceButtonControl}
+                    onPress={() => {
+                      const newMax = Math.max(priceRange[0] + PRICE_STEP, priceRange[1] - PRICE_STEP);
+                      setPriceRange([priceRange[0], newMax]);
+                      setMaxPriceInput(newMax.toString());
+                    }}
+                  >
+                    <Text style={styles.priceButtonControlText}>−</Text>
+                  </TouchableOpacity>
+                  
+                  <View style={styles.priceInputWrapper}>
+                    <TextInput
+                      style={styles.priceInput}
+                      value={maxPriceInput}
+                      onBlur={handleMaxPriceBlur}
+                      onChangeText={handleMaxPriceChange}
+                      keyboardType="numeric"
+                      placeholder={MAX_PRICE.toLocaleString('vi-VN')}
+                    />
+                    <Text style={styles.priceInputUnit}>VND</Text>
+                  </View>
+                  
+                  <TouchableOpacity
+                    style={styles.priceButtonControl}
+                    onPress={() => {
+                      const newMax = Math.min(MAX_PRICE, priceRange[1] + PRICE_STEP);
+                      setPriceRange([priceRange[0], newMax]);
+                      setMaxPriceInput(newMax.toString());
+                    }}
+                  >
+                    <Text style={styles.priceButtonControlText}>+</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+              
+              <Text style={styles.priceHint}>
+                Khoảng giá: {MIN_PRICE.toLocaleString('vi-VN')} - {MAX_PRICE.toLocaleString('vi-VN')} VND
+              </Text>
             </View>
           </ScrollView>
 
@@ -209,17 +295,22 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   ratingChip: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 20,
-    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 2,
     borderColor: '#E5E7EB',
     backgroundColor: 'white',
-    gap: 4,
-    minWidth: 50,
+    gap: 6,
+    minWidth: 70,
     justifyContent: 'center',
+  },
+  starContainer: {
+    flexDirection: 'row',
+    gap: 2,
+    minHeight: 12,
   },
   ratingChipActive: {
     backgroundColor: '#17A2B8',
@@ -317,8 +408,63 @@ const styles = StyleSheet.create({
   priceHint: {
     fontSize: 12,
     color: '#999',
-    marginTop: 8,
+    marginTop: 12,
     textAlign: 'center',
+  },
+  priceInputGroup: {
+    marginBottom: 16,
+  },
+  priceInputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 8,
+  },
+  priceInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  priceButtonControl: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#17A2B8',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#17A2B8',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  priceButtonControlText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  priceInputWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    paddingHorizontal: 16,
+    height: 52,
+  },
+  priceInput: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1a1a1a',
+  },
+  priceInputUnit: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#17A2B8',
+    marginLeft: 8,
   },
   footer: {
     padding: 20,
@@ -331,12 +477,12 @@ const styles = StyleSheet.create({
   },
   resetButton: {
     flex: 1,
-    height: 56,
+    height: 52,
     backgroundColor: '#F8F9FA',
-    borderRadius: 28,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#E5E7EB',
   },
   resetButtonText: {
@@ -346,15 +492,20 @@ const styles = StyleSheet.create({
   },
   applyButton: {
     flex: 2,
-    height: 56,
+    height: 52,
     backgroundColor: '#17A2B8',
-    borderRadius: 28,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#17A2B8',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   applyButtonText: {
     color: 'white',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
 });

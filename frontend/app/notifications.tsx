@@ -1,13 +1,16 @@
 import { useRouter, useFocusEffect } from 'expo-router';
 import { ArrowLeft, Bell, Calendar, Check, ChevronRight, Clock, X } from 'lucide-react-native';
 import { useState, useCallback } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
 import { getNotifications, markAsRead, markAllAsRead, deleteNotification, clearAllNotifications, Notification } from '../services/notificationService';
+import { useToast } from '../contexts/ToastContext';
+import { auth } from '../config/firebase';
 
 type NotificationType = 'booking_created' | 'booking_cancelled' | 'check_in_reminder';
 
 export default function NotificationsScreen() {
   const router = useRouter();
+  const { showError, showSuccess } = useToast();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [loading, setLoading] = useState(true);
@@ -27,12 +30,10 @@ export default function NotificationsScreen() {
       if (response.success) {
         // Notifications already sorted by createdAt (newest first) in service
         setNotifications(response.data);
-      } else {
-        Alert.alert('Error', response.error || 'Failed to load notifications');
-      }
+      } 
     } catch (error) {
       console.error('Load notifications error:', error);
-      Alert.alert('Error', 'Failed to load notifications');
+      showError('Failed to load notifications');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -96,23 +97,18 @@ export default function NotificationsScreen() {
   };
 
   const handleDelete = async (id: string, title: string) => {
-    Alert.alert(
-      'Delete Notification',
-      `Delete "${title}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            const response = await deleteNotification(id);
-            if (response.success) {
-              setNotifications(notifications.filter(n => n.id !== id));
-            }
-          },
-        },
-      ]
-    );
+    try {
+      const response = await deleteNotification(id);
+      if (response.success) {
+        setNotifications(notifications.filter(n => n.id !== id));
+        showSuccess('Notification deleted');
+      } else {
+        showError('Failed to delete notification');
+      }
+    } catch (error) {
+      console.error('Delete notification error:', error);
+      showError('Failed to delete notification');
+    }
   };
 
   const handleMarkAllAsRead = async () => {
@@ -126,32 +122,20 @@ export default function NotificationsScreen() {
     }
   };
 
-  const handleClearAll = () => {
-    Alert.alert(
-      'Clear All Notifications',
-      'This will hide all current notifications. Are you sure?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear All',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const response = await clearAllNotifications();
-              if (response.success) {
-                // Reload to show empty state
-                await loadNotifications();
-              } else {
-                Alert.alert('Error', 'Failed to clear notifications');
-              }
-            } catch (error) {
-              console.error('Clear all error:', error);
-              Alert.alert('Error', 'Failed to clear notifications');
-            }
-          },
-        },
-      ]
-    );
+  const handleClearAll = async () => {
+    try {
+      const response = await clearAllNotifications();
+      if (response.success) {
+        // Reload to show empty state
+        await loadNotifications();
+        showSuccess('All notifications cleared');
+      } else {
+        showError('Failed to clear notifications');
+      }
+    } catch (error) {
+      console.error('Clear all error:', error);
+      showError('Failed to clear notifications');
+    }
   };
 
   const handleNotificationPress = (notification: Notification) => {
@@ -160,7 +144,7 @@ export default function NotificationsScreen() {
       handleMarkAsRead(notification.id);
     }
     
-    // Navigate to booking detail - use router.push with proper type
+    // Navigate to booking detail
     router.push({
       pathname: '/booking/id' as any,
       params: { id: notification.bookingId }
@@ -213,6 +197,21 @@ export default function NotificationsScreen() {
 
       {/* Notifications List */}
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+        {!auth.currentUser && (
+          <TouchableOpacity 
+            style={styles.loginBanner}
+            onPress={() => router.push('/auth/login')}
+            activeOpacity={0.9}
+          >
+            <View style={styles.loginBannerContent}>
+              <Bell size={20} color="#17A2B8" />
+              <Text style={styles.loginBannerText}>
+                Sign in to receive notifications
+              </Text>
+            </View>
+            <ChevronRight size={20} color="#17A2B8" />
+          </TouchableOpacity>
+        )}
         {loading ? (
           <View style={styles.emptyState}>
             <ActivityIndicator size="large" color="#17A2B8" />
@@ -255,10 +254,6 @@ export default function NotificationsScreen() {
                     <Text style={styles.notificationMessage}>{notification.message}</Text>
                     <Text style={styles.notificationTime}>{getTimeAgo(notification.createdAt)}</Text>
 
-                    <View style={styles.actionButton}>
-                      <Text style={styles.actionButtonText}>View Booking</Text>
-                      <ChevronRight size={14} color="#17A2B8" />
-                    </View>
                   </View>
                 </View>
 
@@ -307,6 +302,29 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8F9FA',
+  },
+  loginBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(23, 162, 184, 0.1)',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(23, 162, 184, 0.3)',
+  },
+  loginBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  loginBannerText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#17A2B8',
   },
   header: {
     flexDirection: 'row',

@@ -37,12 +37,12 @@ export default function OnboardingScreen() {
       setCurrentIndex(nextIndex);
       scrollViewRef.current?.scrollTo({ x: width * nextIndex, animated: true });
     } else {
-      router.replace('/auth/register');
+      router.replace('/tabs');
     }
   };
 
   const handleSkip = () => {
-    router.replace('/auth/register');
+    router.replace('/tabs');
   };
 
   return (

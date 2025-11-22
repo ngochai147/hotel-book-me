@@ -8,15 +8,16 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Image,
 } from 'react-native';
 import { getReviewsByHotelId, Review, formatReviewDate } from '../../../services/reviewService';
 import { getHotelById } from '../../../services/hotelService';
+import { useToast } from '../../../contexts/ToastContext';
 
 export default function AllReviewsScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
+  const { showError } = useToast();
   
   const [reviews, setReviews] = useState<Review[]>([]);
   const [hotelName, setHotelName] = useState('');
@@ -41,11 +42,11 @@ export default function AllReviewsScreen() {
       if (response.success) {
         setReviews(response.data);
       } else {
-        Alert.alert('Error', response.message || 'Failed to load reviews');
+        showError(response.message || 'Failed to load reviews');
       }
     } catch (error) {
       console.error('Load reviews error:', error);
-      Alert.alert('Error', 'Failed to load reviews');
+      showError('Failed to load reviews');
     } finally {
       setLoading(false);
     }

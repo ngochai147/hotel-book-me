@@ -132,25 +132,25 @@ export default function ConfirmBookingScreen() {
           <Text style={styles.sectionTitle}>Price Details</Text>
           <View style={styles.priceCard}>
             <View style={styles.priceRow}>
-              <Text style={styles.priceLabel}>${bookingDetails.pricePerNight} x {bookingDetails.nights} nights</Text>
-              <Text style={styles.priceValue}>${bookingDetails.pricePerNight * bookingDetails.nights}</Text>
+              <Text style={styles.priceLabel}>{bookingDetails.pricePerNight.toLocaleString('vi-VN')} VND x {bookingDetails.nights} đêm</Text>
+              <Text style={styles.priceValue}>{(bookingDetails.pricePerNight * bookingDetails.nights).toLocaleString('vi-VN')} VND</Text>
             </View>
 
             <View style={styles.priceRow}>
-              <Text style={styles.priceLabel}>Service fee</Text>
-              <Text style={styles.priceValue}>${bookingDetails.serviceFee}</Text>
+              <Text style={styles.priceLabel}>Phí dịch vụ</Text>
+              <Text style={styles.priceValue}>{bookingDetails.serviceFee.toLocaleString('vi-VN')} VND</Text>
             </View>
 
             <View style={styles.priceRow}>
-              <Text style={styles.priceLabel}>Cleaning fee</Text>
-              <Text style={styles.priceValue}>${bookingDetails.cleaningFee}</Text>
+              <Text style={styles.priceLabel}>Phí vệ sinh</Text>
+              <Text style={styles.priceValue}>{bookingDetails.cleaningFee.toLocaleString('vi-VN')} VND</Text>
             </View>
 
             <View style={styles.divider} />
 
             <View style={styles.priceRow}>
-              <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalValue}>${total}</Text>
+              <Text style={styles.totalLabel}>Tổng cộng</Text>
+              <Text style={styles.totalValue}>{total.toLocaleString('vi-VN')} VND</Text>
             </View>
           </View>
         </View>

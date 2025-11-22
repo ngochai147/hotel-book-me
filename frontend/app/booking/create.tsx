@@ -8,7 +8,6 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Platform,
   Image,
   Modal,
@@ -17,19 +16,41 @@ import { getHotelById, Hotel } from '../../services/hotelService';
 import { createBooking } from '../../services/bookingService';
 import { auth } from '../../config/firebase';
 import { getImageUri } from '../../utils/imageHelper';
+import { useToast } from '../../contexts/ToastContext';
+import { Validator } from '../../utils/validation';
 
 export default function CreateBookingScreen() {
   const router = useRouter();
-  const { hotelId, selectedRooms } = useLocalSearchParams();
+  const { hotelId, selectedRooms, checkIn, checkOut, guests: guestsParam } = useLocalSearchParams();
+  const { showError, showSuccess, showWarning } = useToast();
   
   const [hotel, setHotel] = useState<Hotel | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  // Booking data
-  const [checkInDate, setCheckInDate] = useState(new Date(Date.now() + 86400000)); // Tomorrow
-  const [checkOutDate, setCheckOutDate] = useState(new Date(Date.now() + 2 * 86400000)); // Day after
-  const [guests, setGuests] = useState(2);
+  // Parse date from DD-MM-YYYY format
+  const parseDate = (dateStr: string | undefined) => {
+    if (!dateStr) return null;
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const [day, month, year] = parts.map(Number);
+      return new Date(year, month - 1, day);
+    }
+    return null;
+  };
+
+  // Booking data - use params from chatbot if available
+  const [checkInDate, setCheckInDate] = useState(() => {
+    const parsed = parseDate(checkIn as string);
+    return parsed || new Date(Date.now() + 86400000);
+  });
+  const [checkOutDate, setCheckOutDate] = useState(() => {
+    const parsed = parseDate(checkOut as string);
+    return parsed || new Date(Date.now() + 2 * 86400000);
+  });
+  const [guests, setGuests] = useState(() => {
+    return guestsParam ? parseInt(guestsParam as string) : 2;
+  });
   const [showDatePicker, setShowDatePicker] = useState<'checkIn' | 'checkOut' | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(new Date());
 
@@ -38,6 +59,18 @@ export default function CreateBookingScreen() {
 
   useEffect(() => {
     loadHotelData();
+    
+    // Log booking params for debugging
+    console.log('Booking Create - Received params:', {
+      hotelId,
+      checkIn,
+      checkOut,
+      guests: guestsParam,
+      selectedRooms,
+      parsedCheckIn: checkInDate.toLocaleDateString(),
+      parsedCheckOut: checkOutDate.toLocaleDateString(),
+      parsedGuests: guests,
+    });
   }, [hotelId]);
 
   const loadHotelData = async () => {
@@ -47,11 +80,11 @@ export default function CreateBookingScreen() {
       if (response.success && response.data) {
         setHotel(response.data);
       } else {
-        Alert.alert('Error', 'Failed to load hotel details');
+        showError('Failed to load hotel details');
       }
     } catch (error) {
       console.error('Load hotel error:', error);
-      Alert.alert('Error', 'Failed to load hotel details');
+      showError('Failed to load hotel details');
     } finally {
       setLoading(false);
     }
@@ -162,23 +195,83 @@ export default function CreateBookingScreen() {
     // Validation
     const currentUser = auth.currentUser;
     if (!currentUser) {
-      Alert.alert('Login Required', 'Please login to make a booking');
+      showWarning('Please login to make a booking');
       router.push('/auth/login' as any);
       return;
     }
 
-    if (selectedRoomTypes.length === 0) {
-      Alert.alert('No Rooms Selected', 'Please select at least one room type');
+    // Validation 1: Check-in date must not be more than 4 days from now
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const checkInTime = new Date(checkInDate);
+    checkInTime.setHours(0, 0, 0, 0);
+    const daysUntilCheckIn = Math.ceil((checkInTime.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (daysUntilCheckIn > 4) {
+      showError('Không thể đặt phòng quá 4 ngày trước. Vui lòng chọn ngày check-in gần hơn.');
       return;
     }
 
-    if (checkInDate >= checkOutDate) {
-      Alert.alert('Invalid Dates', 'Check-out date must be after check-in date');
+    // Validation 2: Booking duration must be between 1-7 days
+    const nights = Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (nights < 1) {
+      showError('Thời gian đặt phòng phải ít nhất 1 ngày.');
+      return;
+    }
+    if (nights > 7) {
+      showError('Chỉ có thể đặt phòng tối đa 7 ngày. Vui lòng chọn thời gian ngắn hơn.');
       return;
     }
 
-    if (guests < 1) {
-      Alert.alert('Invalid Guests', 'Number of guests must be at least 1');
+    // Validation 3: Check guest count against room capacity
+    if (!hotel || !hotel.roomTypes) {
+      showError('Không tải được thông tin khách sạn');
+      return;
+    }
+    
+    let totalCapacity = 0;
+    selectedRoomTypes.forEach(roomName => {
+      const room = hotel.roomTypes?.find((r: any) => r.name === roomName);
+      if (room) {
+        totalCapacity += room.maxOccupancy || 2; // Default 2 if not specified
+      }
+    });
+
+    if (guests > totalCapacity) {
+      showError(`Số người (${guests}) vượt quá sức chứa của phòng (${totalCapacity}). Vui lòng chọn thêm phòng hoặc giảm số người.`);
+      return;
+    }
+
+    const validator = new Validator();
+    
+    const isValid = validator.validate({
+      roomTypes: selectedRoomTypes,
+      checkInDate,
+      checkOutDate,
+      guests
+    }, {
+      roomTypes: {
+        required: true,
+        custom: (value) => Array.isArray(value) && value.length > 0,
+        message: 'Please select at least one room type'
+      },
+      checkInDate: {
+        required: true,
+        custom: (value) => value < checkOutDate,
+        message: 'Check-out date must be after check-in date'
+      },
+      guests: {
+        required: true,
+        min: 1,
+        message: 'Number of guests must be at least 1'
+      }
+    });
+
+    if (!isValid) {
+      const firstError = validator.getFirstError();
+      if (firstError) {
+        showError(firstError);
+      }
       return;
     }
 
@@ -200,37 +293,22 @@ export default function CreateBookingScreen() {
       const result = await createBooking(token, bookingData);
 
       if (result.success && result.data) {
-        Alert.alert(
-          'Booking Successful! 🎉',
-          `Booking number: ${result.data.bookingNumber}\n\nThank you for your booking!`,
-          [
-            {
-              text: 'View My Bookings',
-              onPress: () => router.push('/tabs/booking' as any),
-            },
-            {
-              text: 'OK',
-              onPress: () => router.push('/tabs' as any),
-            },
-          ]
-        );
+        showSuccess(`Booking successful! 🎉 Booking #${result.data.bookingNumber}`);
+        setTimeout(() => router.push('/tabs/booking' as any), 1500);
       } else {
         // Show detailed error if rooms unavailable
         if (result.unavailableRooms && result.unavailableRooms.length > 0) {
           const roomList = result.unavailableRooms
-            .map((r: any) => `- ${r.roomType}`)
-            .join('\n');
-          Alert.alert(
-            'Rooms Not Available',
-            `The following rooms are not available for selected dates:\n\n${roomList}\n\nPlease select different dates or rooms.`
-          );
+            .map((r: any) => r.roomType)
+            .join(', ');
+          showError(`Rooms not available: ${roomList}. Please select different dates.`);
         } else {
-          Alert.alert('Booking Failed', result.message || 'Something went wrong');
+          showError(result.message || 'Booking failed. Something went wrong.');
         }
       }
     } catch (error: any) {
       console.error('Booking error:', error);
-      Alert.alert('Error', error.message || 'Failed to create booking');
+      showError(error.message || 'Failed to create booking');
     } finally {
       setSubmitting(false);
     }
@@ -300,7 +378,7 @@ export default function CreateBookingScreen() {
                   <Text style={styles.roomName}>{roomName}</Text>
                   {room && (
                     <Text style={styles.roomPrice}>
-                      ${room.price.toLocaleString()}/night
+                      {room.price.toLocaleString('vi-VN')} VND/đêm
                     </Text>
                   )}
                 </View>
@@ -425,14 +503,14 @@ export default function CreateBookingScreen() {
           <View style={styles.priceCard}>
             <View style={styles.priceRow}>
               <Text style={styles.priceLabel}>
-                {selectedRoomTypes.length} room{selectedRoomTypes.length > 1 ? 's' : ''} × {nights} night{nights > 1 ? 's' : ''}
+                {selectedRoomTypes.length} phòng × {nights} đêm
               </Text>
-              <Text style={styles.priceValue}>${totalPrice.toLocaleString()}</Text>
+              <Text style={styles.priceValue}>{totalPrice.toLocaleString('vi-VN')} VND</Text>
             </View>
             <View style={styles.priceDivider} />
             <View style={styles.priceRow}>
-              <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalValue}>${totalPrice.toLocaleString()}</Text>
+              <Text style={styles.totalLabel}>Tổng cộng</Text>
+              <Text style={styles.totalValue}>{totalPrice.toLocaleString('vi-VN')} VND</Text>
             </View>
           </View>
         </View>
@@ -457,8 +535,8 @@ export default function CreateBookingScreen() {
       {/* Bottom Action */}
       <View style={styles.bottomBar}>
         <View style={styles.bottomPriceInfo}>
-          <Text style={styles.bottomPriceLabel}>Total Amount</Text>
-          <Text style={styles.bottomPriceValue}>${totalPrice.toLocaleString()}</Text>
+          <Text style={styles.bottomPriceLabel}>Tổng tiền</Text>
+          <Text style={styles.bottomPriceValue}>{totalPrice.toLocaleString('vi-VN')} VND</Text>
         </View>
         <TouchableOpacity
           style={[styles.bookButton, submitting && { opacity: 0.6 }]}
