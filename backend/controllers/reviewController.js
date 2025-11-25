@@ -147,7 +147,17 @@ export const createReview = async (req, res, next) => {
         if (hotel.reviews.length > 5) {
             hotel.reviews = hotel.reviews.slice(0, 5);
         }
-
+        hotel.reviews = hotel.reviews.map(r => {
+            if (r.date && typeof r.date === 'string') {
+                // Try to parse string date, fallback to now if invalid
+                const parsedDate = new Date(r.date);
+                return {
+                    ...r,
+                    date: isNaN(parsedDate.getTime()) ? new Date() : parsedDate
+                };
+            }
+            return r;
+        });
         // Recalculate hotel's average rating from all reviews
         const allReviews = await Review.find({ hotelId });
         const avgRating =
@@ -155,7 +165,7 @@ export const createReview = async (req, res, next) => {
             allReviews.length;
         hotel.rating = Math.round(avgRating * 10) / 10;
 
-        await hotel.save();
+        await hotel.save({ validateBeforeSave: false });
 
         const populatedReview = await Review.findById(review._id)
             .populate("userId", "userName avatar")
